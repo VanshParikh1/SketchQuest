@@ -12,6 +12,7 @@ import {
   sketchRect,
 } from "./sketch";
 import { sx, sy } from "./units";
+import { drawAssistPlatform, isAssist } from "./assistArt";
 
 type Box = { id: string; x: number; y: number; w: number; h: number };
 const px = (r: Box) => ({ x: sx(r.x), y: sy(r.y), w: sx(r.w), h: sy(r.h) });
@@ -27,7 +28,10 @@ const MAX_TEETH = 60;
 export function renderStaticLevel(scene: Phaser.Scene, level: Level): Phaser.GameObjects.RenderTexture {
   const g = scene.make.graphics({}, false);
 
-  for (const p of level.platforms) drawPlatform(g, p);
+  for (const p of level.platforms) {
+    if (isAssist(p.id)) drawAssistPlatform(g, p);
+    else drawPlatform(g, p);
+  }
   for (const h of level.hazards) {
     if (h.type === "lava") drawLavaBody(g, h);
     else drawSpikes(g, h);
