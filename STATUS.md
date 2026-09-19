@@ -79,12 +79,18 @@ Level coordinate conventions (as the game currently interprets them):
 
 - **`mountGame(el)`** creates the Phaser game (1600x900, scale FIT, centered, arcade physics with shared `GRAVITY`) and returns a `GameHandle { game, loadLevel, destroy }`.
 - **`loadLevel(level)`** (also `handle.loadLevel`) validates with `LevelSchema`, then restarts the scene with the new level. No page refresh is needed. If called before Phaser has finished booting, it waits for boot.
-- **`GameScene`** loads `sampleLevel` by default. Coordinates are scaled from 0-1000 to world pixels. Everything is drawn as colored rectangles:
+- **`GameScene`**:
   - platforms: static arcade bodies, player collides
-  - hazards: spike (red) and lava (orange), no logic
-  - coins (20px), enemies (32px, static) and the goal: no logic
-  - player: arrow keys or WASD to run, Up / W / Space to jump, using the shared constants
-- Fields on `GameScene` for the next layer of logic: `player`, `platforms` (static group), `hazards`, `coins`, `enemies`, `goal`. The last four are plain rectangle lists, and each rectangle has its level `id` in `getData("id")`.
+  - hazards: spike (red) and lava (orange) with lethal collision (`cause: "spike" | "lava"`)
+  - enemies: arcade physics sprites patrolling horizontally across `patrol` range (`cause: "enemy"` on touch)
+  - coins: floating animation, collected on overlap with star particle burst and counter increment
+  - goal: overlap triggers celebration particles, victory popup, and `gameEvents.emit("win")`
+  - fall death: bottom world bound is open, falling below world triggers `cause: "fall"`
+  - death & metrics: screen shake (250ms), red screen flash, shatter particles, repeat spot clustering (80px radius), emits `gameEvents.emit("death", event)`
+  - game feel: jump & landing squash and stretch, dust particles, auto-respawn after 750ms
+  - entity ID badges: floating labels toggleable with key `B`
+- **`DeathTracker`**: manages attempts, repeat-death spot tracking, elapsed survival time, and coins.
+- **`IdBadgeOverlay`**: renders floating badges (`ground-1`, `spike-1`, etc.) above entities for voice-edit add-on.
 
 ## UI (`client/src/ui`)
 
@@ -92,22 +98,20 @@ Level coordinate conventions (as the game currently interprets them):
 
 ## Verified
 
-- `npm run typecheck` and `npm run build` pass.
+- `npm run typecheck`, `npm test`, and `npm run build` pass.
 - Dev: the game renders, the player runs and jumps and lands on platforms, and `loadLevel(customLevel)` rebuilds the scene with no refresh and a single canvas.
+- Lethal collision on spikes, lava, patrolling enemies, and falling into the pit emits `gameEvents.emit("death")`.
+- Coin collection and goal win state emits `gameEvents.emit("win")`.
 - The `/api` proxy from Vite to Express works.
 - Production (`npm run build && npm start`): serves the client at `/`, falls back to `index.html` for unknown routes, and still returns JSON for `/api`.
 
 ## Not done yet
 
-- Death logic (spike, lava, enemy, fall), win logic, respawn/attempt counting, and emitting `gameEvents` (`"death"`, `"win"`).
-- Coin collection and enemy patrol movement.
 - Real `/api/level` (sketch to Gemini to `Level`, validated with `LevelSchema`) and `/api/roast`.
-- Sketch upload and other UI screens.
+- Sketch upload, camera capture, and live narrator UI screens.
 - Sample sketches in `samples/`.
-- Tests.
 
 ## Known quirks
 
 - In dev you will see harmless `Cannot suspend/resume a closed AudioContext` console errors. They come from React StrictMode mounting and destroying the game once.
 - The client bundle is about 1.5 MB because of Phaser, so Vite prints a chunk-size warning.
-- The player collides with the bottom edge of the world, so falling off the level does not yet count as a death.
