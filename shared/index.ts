@@ -3,3 +3,4 @@ export * from "./level";
 export * from "./events";
 export * from "./api";
 export * from "./sanitizeLevel";
+export * from "./validate";
