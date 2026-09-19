@@ -4,6 +4,7 @@ import { playJump } from "./audio";
 import { BOIL_VARIANTS, DEPTH } from "./palette";
 import { seededFor } from "./sketch";
 import { drawPlayer } from "./characterArt";
+import { PF_AIRBORNE, PF_FACING_LEFT, PF_LANDING, PF_RISING, PF_RUNNING, type PlayerFrame } from "./RunRecorder";
 
 /** Invisible physics carrier color; the visible doodle is the `art` Graphics. */
 const PLAYER_COLOR = 0x2a6df4;
@@ -31,6 +32,8 @@ export class Player {
   private readonly art: Phaser.GameObjects.Graphics;
   private facing: 1 | -1 = 1;
   private artKey = "";
+  /** Called on every real (input-driven) jump, for the run recorder. */
+  onJump?: () => void;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     this.scene = scene;
@@ -94,6 +97,7 @@ export class Player {
       this.body.setVelocityY(-JUMP_VELOCITY);
       this.playJumpSquash();
       playJump();
+      this.onJump?.();
     } else if (!jumpDown && this.body.velocity.y < -JUMP_VELOCITY * JUMP_CUTOFF_FACTOR) {
       // Released early: cut the ascent short for a shorter jump.
       this.body.setVelocityY(-JUMP_VELOCITY * JUMP_CUTOFF_FACTOR);
@@ -119,22 +123,86 @@ export class Player {
     this.art.setVisible(active);
   }
 
+  /** Fills `out` with everything a replay needs to redraw this exact frame. */
+  snapshot(out: PlayerFrame): PlayerFrame {
+    const { body, rect } = this;
+    const pose = this.pose();
+    let flags = 0;
+    if (pose.running) flags |= PF_RUNNING;
+    if (pose.airborne) flags |= PF_AIRBORNE;
+    if (pose.rising) flags |= PF_RISING;
+    if (!pose.airborne && rect.scaleY < 0.97) flags |= PF_LANDING;
+    if (this.facingFor(body.velocity.x) < 0) flags |= PF_FACING_LEFT;
+    out.x = body.center.x;
+    out.y = body.center.y;
+    out.scaleX = rect.scaleX;
+    out.scaleY = rect.scaleY;
+    out.flags = flags;
+    return out;
+  }
+
+  /** Replay mode: the body is switched off and the doodle is driven from recorded frames (see `drawReplay`). */
+  enterReplay() {
+    this.body.enable = false;
+    this.artKey = "";
+  }
+
+  /** Back to live play; the caller teleports the player to the start afterwards. */
+  exitReplay() {
+    this.scene.tweens.killTweensOf(this.rect);
+    this.setActive(true);
+    this.artKey = "";
+  }
+
   /**
    * Follows the physics body every frame (so squash/stretch and facing stay
    * smooth) but only redraws the doodle when the boil tick or pose changes.
    */
   draw(tick: number) {
-    const { art, body, rect } = this;
-    const vx = body.velocity.x;
-    if (vx > 5) this.facing = 1;
-    else if (vx < -5) this.facing = -1;
+    const { body, rect } = this;
+    this.facing = this.facingFor(body.velocity.x);
+    this.paint(tick, body.center.x, body.center.y, rect.scaleX, rect.scaleY, this.pose());
+  }
 
-    art.setPosition(body.center.x, body.center.y);
-    art.setScale(rect.scaleX * this.facing, rect.scaleY);
+  /** Same doodle and cache as `draw`, positioned and posed from a recorded (interpolated) frame. */
+  drawReplay(tick: number, f: PlayerFrame) {
+    this.facing = f.flags & PF_FACING_LEFT ? -1 : 1;
+    this.paint(tick, f.x, f.y, f.scaleX, f.scaleY, {
+      running: (f.flags & PF_RUNNING) !== 0,
+      airborne: (f.flags & PF_AIRBORNE) !== 0,
+      rising: (f.flags & PF_RISING) !== 0,
+    });
+  }
 
+  private facingFor(vx: number): 1 | -1 {
+    if (vx > 5) return 1;
+    if (vx < -5) return -1;
+    return this.facing;
+  }
+
+  private pose() {
+    const { body } = this;
     const airborne = !this.grounded;
-    const running = !airborne && Math.abs(vx) > 10;
-    const rising = airborne && body.velocity.y < 0;
+    return {
+      running: !airborne && Math.abs(body.velocity.x) > 10,
+      airborne,
+      rising: airborne && body.velocity.y < 0,
+    };
+  }
+
+  private paint(
+    tick: number,
+    x: number,
+    y: number,
+    scaleX: number,
+    scaleY: number,
+    pose: { running: boolean; airborne: boolean; rising: boolean }
+  ) {
+    const { art } = this;
+    art.setPosition(x, y);
+    art.setScale(scaleX * this.facing, scaleY);
+
+    const { running, airborne, rising } = pose;
     const key = `${tick}:${running}:${airborne}:${rising}`;
     if (key === this.artKey) return;
     this.artKey = key;

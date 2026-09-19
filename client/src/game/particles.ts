@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { DEPTH } from "./palette";
+import { DEPTH, INK } from "./palette";
 
 export type BurstOptions = {
   color?: number;
@@ -57,4 +57,14 @@ export function burstParticles(scene: Phaser.Scene, x: number, y: number, opts: 
       },
     });
   }
+}
+
+/** Yellow burst when a coin is picked up (live or replayed). */
+export function coinBurst(scene: Phaser.Scene, x: number, y: number) {
+  burstParticles(scene, x, y, { color: INK.yellow, count: 10, speed: [40, 100], size: 5, duration: 350 });
+}
+
+/** Ink-black burst when an enemy is stomped (live or replayed). */
+export function enemyDeathBurst(scene: Phaser.Scene, x: number, y: number) {
+  burstParticles(scene, x, y, { color: INK.black, count: 8, speed: [40, 110], size: 4, duration: 350 });
 }

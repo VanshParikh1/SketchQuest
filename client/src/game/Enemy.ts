@@ -3,7 +3,7 @@ import { RUN_SPEED, WORLD_W } from "@sketchquest/shared";
 import { BOIL_VARIANTS, DEPTH } from "./palette";
 import { seededFor } from "./sketch";
 import { drawEnemy } from "./characterArt";
-import { burstParticles } from "./particles";
+import { enemyDeathBurst } from "./particles";
 
 const ENEMY_SIZE = 32;
 /** Invisible physics carrier color; the visible stick figure is the `art` Graphics. */
@@ -13,6 +13,11 @@ const EDGE_PROBE_SIZE = 4;
 
 /** Normalized 0-1000 distance -> world px, matching GameScene's scale. */
 const scaleDistance = (v: number) => (v / 1000) * WORLD_W;
+
+/** The stick-figure doodle for one flip-book frame; shared by live enemies and replay ghosts. */
+export function redrawEnemy(art: Phaser.GameObjects.Graphics, id: string, tick: number) {
+  drawEnemy(art, { tick }, seededFor(id, tick % BOIL_VARIANTS));
+}
 
 /**
  * A patrol enemy: a dynamic arcade body affected by gravity, walking back
@@ -31,10 +36,14 @@ export class Enemy {
   private readonly scene: Phaser.Scene;
   private readonly art: Phaser.GameObjects.Graphics;
   private lastTick = -1;
+  private lastX: number;
+  private lastY: number;
 
   constructor(scene: Phaser.Scene, id: string, x: number, y: number, patrol: number) {
     this.id = id;
     this.scene = scene;
+    this.lastX = x;
+    this.lastY = y;
     this.rect = scene.add.rectangle(x, y, ENEMY_SIZE, ENEMY_SIZE, ENEMY_COLOR).setAlpha(0);
     this.art = scene.add.graphics().setDepth(DEPTH.enemy);
     this.rect.setData("id", id);
@@ -47,6 +56,19 @@ export class Enemy {
     this.minX = x - halfRange;
     this.maxX = x + halfRange;
     this.body.setVelocityX(PATROL_SPEED * this.direction);
+  }
+
+  /** Center position (frozen where it died, once dead), for the run recorder. */
+  get x() {
+    return this.alive ? this.body.center.x : this.lastX;
+  }
+
+  get y() {
+    return this.alive ? this.body.center.y : this.lastY;
+  }
+
+  get facingLeft() {
+    return this.direction < 0;
   }
 
   /** Y of the enemy's midpoint, for the stomp-vs-side-hit check. */
@@ -74,7 +96,14 @@ export class Enemy {
     art.setPosition(body.center.x, body.center.y).setScale(this.direction, 1);
     if (tick === this.lastTick) return;
     this.lastTick = tick;
-    drawEnemy(art, { tick }, seededFor(this.id, tick % BOIL_VARIANTS));
+    redrawEnemy(art, this.id, tick);
+  }
+
+  /** Replay mode: hide the live enemy (and stop its body) while recorded ghosts play; show it again after. */
+  setReplayHidden(hidden: boolean) {
+    if (!this.alive) return;
+    this.art.setVisible(!hidden);
+    this.body.enable = !hidden;
   }
 
   private hasGroundAhead(scene: Phaser.Scene, platforms: Phaser.Physics.Arcade.StaticGroup): boolean {
@@ -90,7 +119,9 @@ export class Enemy {
   kill() {
     if (!this.alive) return;
     this.alive = false;
-    burstParticles(this.scene, this.rect.x, this.rect.y, { color: 0x1d1d24, count: 8, speed: [40, 110], size: 4, duration: 350 });
+    this.lastX = this.rect.x;
+    this.lastY = this.rect.y;
+    enemyDeathBurst(this.scene, this.rect.x, this.rect.y);
     this.art.destroy();
     this.rect.destroy();
   }
