@@ -1,16 +1,17 @@
-import { sampleLevel, type Coin, type Enemy, type Hazard, type Level, type Platform } from "@sketchquest/shared";
+import { sampleLevel, type Coin, type Enemy, type Hazard, type Level, type Platform } from "./level";
 
 /**
  * Coerces untrusted, possibly-malformed level data (e.g. bad Gemini output)
  * into something that satisfies LevelSchema: numeric fields are clamped
  * into the 0-1000 range instead of rejected, and individual entities that
- * are missing required fields are dropped instead of throwing. Call this
+ * are missing required fields are dropped (and duplicate ids renamed)
+ * instead of throwing. Call this
  * before LevelSchema.parse so a broken level degrades instead of crashing.
  */
 export function sanitizeLevel(input: unknown): Level {
   const raw = isRecord(input) ? input : {};
 
-  return {
+  const level: Level = {
     name: str(raw.name, "Untitled level"),
     intro: str(raw.intro, ""),
     quips: Array.isArray(raw.quips) ? raw.quips.filter((q): q is string => typeof q === "string") : [],
@@ -20,6 +21,32 @@ export function sanitizeLevel(input: unknown): Level {
     hazards: sanitizeList(raw.hazards, sanitizeHazard),
     coins: sanitizeList(raw.coins, sanitizeCoin),
     enemies: sanitizeList(raw.enemies, sanitizeEnemy),
+  };
+
+  return dedupeIds(level);
+}
+
+/**
+ * Makes every id unique across the level by suffixing repeats ("p1" ->
+ * "p1-2") rather than dropping the entity, so a model that reuses an id
+ * doesn't silently lose platforms.
+ */
+function dedupeIds(level: Level): Level {
+  const used = new Set<string>([level.goal.id]);
+  const unique = <T extends { id: string }>(items: T[]): T[] =>
+    items.map((item) => {
+      let id = item.id;
+      for (let n = 2; used.has(id); n++) id = `${item.id}-${n}`;
+      used.add(id);
+      return id === item.id ? item : { ...item, id };
+    });
+
+  return {
+    ...level,
+    platforms: unique(level.platforms),
+    hazards: unique(level.hazards),
+    coins: unique(level.coins),
+    enemies: unique(level.enemies),
   };
 }
 
