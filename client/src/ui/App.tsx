@@ -23,6 +23,78 @@ const markerLegend = [
   { color: "#8746c7", label: "Enemies" },
 ];
 
+const asPercent = (coordinate: number) => `${coordinate / 10}%`;
+
+function LevelOverlay({ level }: { level: Level }) {
+  return (
+    <div className="level-overlay" aria-hidden="true">
+      {level.platforms.map((platform) => (
+        <span
+          className="detected-box detected-platform"
+          key={platform.id}
+          title={`Platform: ${platform.id}`}
+          style={{
+            left: asPercent(platform.x),
+            top: asPercent(platform.y),
+            width: asPercent(platform.w),
+            height: asPercent(platform.h),
+          }}
+        />
+      ))}
+      {level.hazards.map((hazard) => (
+        <span
+          className="detected-box detected-hazard"
+          key={hazard.id}
+          title={`${hazard.type}: ${hazard.id}`}
+          style={{
+            left: asPercent(hazard.x),
+            top: asPercent(hazard.y),
+            width: asPercent(hazard.w),
+            height: asPercent(hazard.h),
+          }}
+        />
+      ))}
+      <span
+        className="detected-box detected-goal"
+        title="Goal"
+        style={{
+          left: asPercent(level.goal.x),
+          top: asPercent(level.goal.y),
+          width: asPercent(level.goal.w),
+          height: asPercent(level.goal.h),
+        }}
+      />
+      <span
+        className="detected-point detected-start"
+        title="Start"
+        style={{ left: asPercent(level.start.x), top: asPercent(level.start.y) }}
+      >
+        S
+      </span>
+      {level.coins.map((coin) => (
+        <span
+          className="detected-point detected-coin"
+          key={coin.id}
+          title={`Coin: ${coin.id}`}
+          style={{ left: asPercent(coin.x), top: asPercent(coin.y) }}
+        >
+          C
+        </span>
+      ))}
+      {level.enemies.map((enemy) => (
+        <span
+          className="detected-point detected-enemy"
+          key={enemy.id}
+          title={`Enemy: ${enemy.id}`}
+          style={{ left: asPercent(enemy.x), top: asPercent(enemy.y) }}
+        >
+          E
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function loadImage(file: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -116,6 +188,7 @@ export function App() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [level, setLevel] = useState<Level | null>(null);
+  const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
     if (cameraOpen && videoRef.current && streamRef.current) {
@@ -131,12 +204,12 @@ export function App() {
   );
 
   useEffect(() => {
-    if (!level || !gameRef.current) return;
+    if (!level || !playing || !gameRef.current) return;
 
     const handle = mountGame(gameRef.current);
     handle.loadLevel(level);
     return () => handle.destroy();
-  }, [level]);
+  }, [level, playing]);
 
   const closeCamera = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -236,6 +309,7 @@ export function App() {
 
       const result = parseLevelResponse(payload);
       setLevel(result.level);
+      setPlaying(false);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -248,12 +322,13 @@ export function App() {
   };
 
   const scanAnother = () => {
+    setPlaying(false);
     setLevel(null);
     setImage(null);
     setError(null);
   };
 
-  if (level) {
+  if (level && playing) {
     return (
       <main className="game-screen">
         <header className="game-toolbar">
@@ -266,6 +341,65 @@ export function App() {
           </button>
         </header>
         <div className="game-stage" ref={gameRef} aria-label={`${level.name} game`} />
+      </main>
+    );
+  }
+
+  if (level && image) {
+    const detectedObjects = [
+      { color: "#303238", label: "Platforms", count: level.platforms.length },
+      { color: "#dc3f34", label: "Hazards", count: level.hazards.length },
+      { color: "#3478e5", label: "Start", count: 1 },
+      { color: "#2fa65a", label: "Goal", count: 1 },
+      { color: "#e5b91f", label: "Coins", count: level.coins.length },
+      { color: "#8746c7", label: "Enemies", count: level.enemies.length },
+    ];
+
+    return (
+      <main className="review-page">
+        <header className="review-intro">
+          <span className="eyebrow">Analysis complete</span>
+          <h1>What Gemini saw</h1>
+          <p>Check the detected objects, then play the generated level or scan your drawing again.</p>
+        </header>
+
+        <section className="review-layout">
+          <div className="review-card">
+            <div
+              className="analysis-stage"
+              style={{ aspectRatio: `${image.width} / ${image.height}` }}
+              aria-label="Uploaded sketch with detected level objects overlaid"
+            >
+              <img src={image.dataUrl} alt="Uploaded level sketch" />
+              <LevelOverlay level={level} />
+            </div>
+            <p className="analysis-note">Detection boxes are approximate and use the level coordinates returned by the server.</p>
+            <div className="review-actions">
+              <button className="button button-primary" type="button" onClick={() => setPlaying(true)}>
+                Play level
+              </button>
+              <button className="button button-secondary" type="button" onClick={scanAnother}>
+                Rescan
+              </button>
+            </div>
+          </div>
+
+          <aside className="review-summary">
+            <span className="eyebrow">Generated level</span>
+            <h2>{level.name}</h2>
+            <p>{level.intro}</p>
+            <h3>Detected objects</h3>
+            <ul>
+              {detectedObjects.map((item) => (
+                <li key={item.label}>
+                  <span className="marker-swatch" style={{ backgroundColor: item.color }} aria-hidden="true" />
+                  <span>{item.label}</span>
+                  <strong>{item.count}</strong>
+                </li>
+              ))}
+            </ul>
+          </aside>
+        </section>
       </main>
     );
   }
