@@ -17,6 +17,7 @@ import { playDeathEffect } from "./deathEffects";
 import { burstParticles } from "./particles";
 import { Hud } from "./Hud";
 import { WinOverlay } from "./WinOverlay";
+import { LevelIntro } from "./LevelIntro";
 import { DebugOverlay } from "./DebugOverlay";
 import { DEBUG } from "./debug";
 import { debugTestLevels } from "./testLevels";
@@ -54,6 +55,8 @@ export class GameScene extends Phaser.Scene {
   private debugOverlay?: DebugOverlay;
   private dead = false;
   private won = false;
+  /** True while the level-start title card is up: input and physics are frozen. */
+  private intro = false;
   private fallThreshold = WORLD_H + FALL_MARGIN;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -68,9 +71,9 @@ export class GameScene extends Phaser.Scene {
     this.level = data.level ?? sampleLevel;
   }
 
-  /** True while death or the win overlay should block movement and hazards. */
+  /** True while death, the win overlay or the level intro should block movement and hazards. */
   private get locked() {
-    return this.dead || this.won;
+    return this.dead || this.won || this.intro;
   }
 
   create() {
@@ -82,7 +85,9 @@ export class GameScene extends Phaser.Scene {
     this.enemies = [];
     this.dead = false;
     this.won = false;
+    this.intro = false;
     this.winOverlay = undefined;
+    this.physics.world.resume();
     this.attemptState.reset(this);
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H + FALL_MARGIN + 50);
 
@@ -141,10 +146,12 @@ export class GameScene extends Phaser.Scene {
       kb.on("keydown-TWO", () => this.loadDebugLevel(2));
       kb.on("keydown-THREE", () => this.loadDebugLevel(3));
     }
+
+    this.startIntro();
   }
 
   update() {
-    if (Phaser.Input.Keyboard.JustDown(this.restartKey) && !this.dead) {
+    if (Phaser.Input.Keyboard.JustDown(this.restartKey) && !this.dead && !this.intro) {
       this.replay();
       return;
     }
@@ -166,6 +173,17 @@ export class GameScene extends Phaser.Scene {
       this.attemptState.lastDeathsAtSpot,
       this.attemptState.timeAlive(this)
     );
+  }
+
+  /** New level loaded: show the title card with physics and input frozen, then "GO!" and unlock. */
+  private startIntro() {
+    this.intro = true;
+    this.physics.world.pause();
+    new LevelIntro(this, this.level.name, () => {
+      this.intro = false;
+      this.physics.world.resume();
+      this.attemptState.restartAttempt(this);
+    });
   }
 
   /** Debug-only (?debug=1): keys 1/2/3 load a test level through the same prepareLevel pipeline as loadLevel. */
