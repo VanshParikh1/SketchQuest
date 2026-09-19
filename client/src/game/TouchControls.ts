@@ -1,5 +1,7 @@
 import Phaser from "phaser";
 import type { MoveInput } from "./Player";
+import { INK } from "./palette";
+import { fillPoly, jitterPoints, rectCorners, seededFor, sketchLine, sketchPoly } from "./sketch";
 
 const DEPTH = 1800;
 /** Button edge length in world px. */
@@ -75,20 +77,24 @@ export class TouchControls {
     return button;
   }
 
+  /** Hand-drawn button: seeded per kind, so redrawing on press/release doesn't change the wobble. */
   private draw({ kind, art, pressed }: Button) {
     const half = BUTTON_SIZE / 2;
+    const rng = seededFor(`touch:${kind}`);
     art.clear();
-    art.fillStyle(0x222222, pressed ? 0.6 : 0.3).fillRoundedRect(-half, -half, BUTTON_SIZE, BUTTON_SIZE, 28);
-    art.lineStyle(4, 0xffffff, pressed ? 0.9 : 0.55).strokeRoundedRect(-half, -half, BUTTON_SIZE, BUTTON_SIZE, 28);
+    const corners = jitterPoints(rectCorners(-half, -half, BUTTON_SIZE, BUTTON_SIZE), 3, rng);
+    fillPoly(art, corners, pressed ? 0xbcd3ff : INK.paper, pressed ? 0.85 : 0.5);
+    sketchPoly(art, corners, { color: INK.black, width: 4, alpha: pressed ? 0.9 : 0.55, wobble: 2.2 }, rng);
 
-    // Chunky arrow: a triangle head plus a stem, in white.
-    art.fillStyle(0xffffff, pressed ? 0.95 : 0.7);
-    if (kind === "left") {
-      art.fillTriangle(-36, 0, -6, -30, -6, 30).fillRect(-6, -11, 38, 22);
-    } else if (kind === "right") {
-      art.fillTriangle(36, 0, 6, -30, 6, 30).fillRect(-32, -11, 38, 22);
-    } else {
-      art.fillTriangle(0, -36, -30, -6, 30, -6).fillRect(-11, -6, 22, 38);
-    }
+    // Chunky marker arrow.
+    const ink = { color: pressed ? INK.blueDark : INK.black, width: 6, alpha: pressed ? 0.95 : 0.6, wobble: 1.4 };
+    const dir = kind === "left" ? [-1, 0] : kind === "right" ? [1, 0] : [0, -1];
+    const [dx, dy] = dir;
+    const px = -dy; // perpendicular
+    const py = dx;
+    const at = (along: number, across: number) => ({ x: dx * along + px * across, y: dy * along + py * across });
+    sketchLine(art, at(-30, 0), at(30, 0), ink, rng);
+    sketchLine(art, at(30, 0), at(6, -24), ink, rng);
+    sketchLine(art, at(30, 0), at(6, 24), ink, rng);
   }
 }

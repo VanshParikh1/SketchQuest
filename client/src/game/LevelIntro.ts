@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import { WORLD_H, WORLD_W } from "@sketchquest/shared";
 import { HAND_FONT } from "./fonts";
+import { INK, INK_CSS } from "./palette";
+import { fillPoly, jitterPoints, rectCorners, seededFor, sketchPoly } from "./sketch";
 
 const DEPTH = 2500;
 /** How long the title card holds input locked, including its fade-in. */
@@ -32,7 +34,7 @@ export class LevelIntro {
       .text(0, 0, levelName, {
         fontFamily: HAND_FONT,
         fontSize: "84px",
-        color: "#222222",
+        color: INK_CSS.black,
         align: "center",
         wordWrap: { width: WORLD_W - 320 },
       })
@@ -41,8 +43,10 @@ export class LevelIntro {
     const w = title.width + 100;
     const h = title.height + 70;
     const paper = scene.add.graphics();
-    paper.fillStyle(0xfffaf0, 0.94).fillRoundedRect(-w / 2, -h / 2, w, h, 26);
-    paper.lineStyle(5, 0x222222, 1).strokeRoundedRect(-w / 2, -h / 2, w, h, 26);
+    const rng = seededFor(`intro:${levelName}`);
+    const corners = jitterPoints(rectCorners(-w / 2, -h / 2, w, h), 3, rng);
+    fillPoly(paper, corners, INK.paper, 0.96);
+    sketchPoly(paper, corners, { color: INK.black, width: 5, wobble: 2.5 }, rng);
 
     return scene.add
       .container(WORLD_W / 2, WORLD_H / 2, [paper, title])
@@ -57,8 +61,8 @@ export class LevelIntro {
       .text(WORLD_W / 2, WORLD_H / 2, "GO!", {
         fontFamily: HAND_FONT,
         fontSize: "150px",
-        color: "#2fb457",
-        stroke: "#ffffff",
+        color: INK_CSS.green,
+        stroke: INK_CSS.paper,
         strokeThickness: 10,
       })
       .setOrigin(0.5)
