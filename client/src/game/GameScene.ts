@@ -26,6 +26,9 @@ import { DEBUG } from "./debug";
 import { debugTestLevels } from "./testLevels";
 import { prepareLevel } from "./prepareLevel";
 import { COIN_SIZE, sx, sy } from "./units";
+import { addPaper } from "./paper";
+import { renderStaticLevel } from "./staticArt";
+import { DEPTH } from "./palette";
 
 export const GAME_SCENE_KEY = "GameScene";
 
@@ -96,6 +99,13 @@ export class GameScene extends Phaser.Scene {
     this.physics.world.resume();
     this.attemptState.reset(this);
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H + FALL_MARGIN + 50);
+
+    // Visual layers: paper, then all static geometry baked once. The colored
+    // rectangles below are invisible physics carriers (alpha 0, same hitboxes).
+    addPaper(this);
+    renderStaticLevel(this, level);
+    // Arcade's ?debug=1 hitbox renderer would otherwise sit under all the art.
+    this.physics.world.debugGraphic?.setDepth(DEPTH.debugHitboxes);
 
     this.platforms = this.physics.add.staticGroup();
     for (const p of level.platforms) {
@@ -304,7 +314,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private rectTopLeft(r: { id: string; x: number; y: number; w: number; h: number }, color: number) {
-    const rect = this.add.rectangle(sx(r.x), sy(r.y), sx(r.w), sy(r.h), color).setOrigin(0, 0);
+    const rect = this.add.rectangle(sx(r.x), sy(r.y), sx(r.w), sy(r.h), color).setOrigin(0, 0).setAlpha(0);
     rect.setData("id", r.id);
     return rect;
   }
