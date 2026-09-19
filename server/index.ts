@@ -1,9 +1,14 @@
+import "./env";
 import path from "node:path";
 import express from "express";
-import dotenv from "dotenv";
-import { sampleLevel, type HealthResponse, type LevelResponse, type RoastResponse } from "@sketchquest/shared";
-
-dotenv.config({ path: path.resolve(import.meta.dirname, "../.env"), quiet: true });
+import {
+  LevelRequestSchema,
+  type HealthResponse,
+  type LevelResponse,
+  type RoastResponse,
+} from "@sketchquest/shared";
+import { levelFromSketch } from "./levelFromSketch";
+import { parseSketchImage } from "./sketchImage";
 
 const PORT = Number(process.env.PORT ?? 3001);
 const CLIENT_DIST = path.resolve(import.meta.dirname, "../client/dist");
@@ -15,9 +20,20 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true } satisfies HealthResponse);
 });
 
-// Stub: will take a sketch image and return a Gemini-generated level.
-app.post("/api/level", (_req, res) => {
-  res.json({ level: sampleLevel, meta: { repairs: 0, fallback: true } } satisfies LevelResponse);
+// Sketch photo -> playable level. Gemini failures never surface as errors: the
+// response is always a playable level, with meta.fallback set when it's a stand-in.
+app.post("/api/level", async (req, res) => {
+  const body = LevelRequestSchema.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "Body must be { image: string } (base64 JPEG)" });
+    return;
+  }
+  const parsed = parseSketchImage(body.data.image);
+  if (!parsed.ok) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  res.json((await levelFromSketch(parsed.image)) satisfies LevelResponse);
 });
 
 // Stub: will take death/win events and return a Gemini-generated roast.
