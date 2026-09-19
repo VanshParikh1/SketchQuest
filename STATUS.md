@@ -139,6 +139,8 @@ Everything is procedural (Phaser Graphics, one canvas texture, one RenderTexture
 
 `App.tsx` lets the player upload or take a photo (camera capture needs HTTPS), sends it to `/api/level`, and then mounts the game with the returned level. It parses `meta` but does not yet show `meta.fallback`, so a stand-in level looks like a successful scan. Keep calling `mountGame` and `loadLevel` from `../game`.
 
+**Scan loading screen (`ScanLoader.tsx` + `ScanLoader.css`, new files).** While `/api/level` is in flight, `App.tsx` renders `<ScanLoader>` instead of the capture page (the only `App.tsx` changes: the import, a separate `scanError` state so scan failures no longer land in the capture page's `error` banner, `playSample`, and the early return). It shows the uploaded photo full-width and dimmed with a green scan line sweeping over it, a faint grid and yellow corner brackets; a 5-stage checklist that advances every 5s on a client timer (the server sends no progress) and stays on the last stage without looping; an elapsed timer (`12s`); "Big drawings take a little longer, still working..." after 20s and "Hang tight, almost there..." after 60s; an SVG doodle (red squiggle that draws itself, blue runner on a line with a coin and a green flag); and a tip that rotates every 6s. On failure the same screen shows the error with **Try again**, **Play a sample level** (loads `sampleLevel` from `@sketchquest/shared` straight into the game) and a "Choose another photo" link. `prefers-reduced-motion` turns off the sweep, the doodle animation and the pulses (stages and tips still change, as text). Colors are the game's marker palette and the font is the same handwriting stack as `HAND_FONT`. The old `.loading-cover` is still used for "Preparing photo..."; its `submitting` branches in `App.tsx` are now unreachable.
+
 ## Verified
 
 - **Real Gemini, `/api/level`:** three phone photos scanned end to end through the dev server (and over a Cloudflare tunnel): 9s, 35s and 9s, zero repair rounds, all non-fallback. The model name (`gemini-3.8-flash`), `response_format` JSON schema, `system_instruction` and `thinking_level: low` are confirmed working. The first attempt hit the original 6s timeout and silently returned a fallback level, so the level timeouts are now 120s / 120s / 300s. The three responses are recorded in `server/fixtures/`.
@@ -160,6 +162,7 @@ Everything is procedural (Phaser Graphics, one canvas texture, one RenderTexture
 - Tests (`fixLevel` is a pure function and a good first unit-test target).
 - Touch mute button (mute is keyboard-only for now).
 - Manual/browser verification of this pass (see above).
+- Browser check of the scan loading screen: phone portrait layout (photo height, whether the stage list + tip fit without scrolling on short phones), scan-line/doodle look, the error card, and reduced-motion. Only `npm run typecheck` and `npm run build` were run for it.
 
 ## How to test
 
