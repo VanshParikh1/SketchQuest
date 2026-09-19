@@ -80,20 +80,25 @@ Level coordinate conventions (as the game currently interprets them):
 
 ## Client game (`client/src/game`)
 
-- **`mountGame(el)`** creates the Phaser game (1600x900, scale FIT, centered, arcade physics with shared `GRAVITY`) and returns a `GameHandle { game, loadLevel, destroy }`.
-- **`loadLevel(level)`** (also `handle.loadLevel`) validates with `LevelSchema`, then restarts the scene with the new level. No page refresh is needed. If called before Phaser has finished booting, it waits for boot. This is also what resets attempt/coin/death tracking, since it's a new level.
+- **`mountGame(el)`** creates the Phaser game (1600x900, scale FIT, centered, arcade physics with shared `GRAVITY`, and Arcade's built-in hitbox debug renderer enabled iff `?debug=1`) and returns a `GameHandle { game, loadLevel, destroy }`.
+- **`loadLevel(level)`** (also `handle.loadLevel`) takes `unknown` (not `Level`) since it has to accept untrusted data (raw Gemini output). It runs the input through `sanitizeLevel()` before `LevelSchema.parse`, then restarts the scene with the result. No page refresh is needed. If called before Phaser has finished booting, it waits for boot. This is also what resets attempt/coin/death tracking, since it's a new level.
+- **`sanitizeLevel.ts`**: coerces arbitrary/malformed level data into something `LevelSchema` accepts instead of letting it throw — numeric fields are clamped into `[0, 1000]`, `w`/`h` fall back to `1` instead of `0`, invalid hazard `type`s fall back to `"spike"`, and any platform/hazard/coin/enemy missing a string `id` is dropped rather than crashing the whole level. Missing `start`/`goal` fall back to `sampleLevel`'s.
+- **`debug.ts`**: exports `DEBUG`, true iff the page URL has `?debug=1`.
+- **`testLevels.ts`**: three levels for the debug hotkeys — `easyLevel` (1), `spikeGauntletLevel` (2), and `messyLevel` (3, typed `unknown` on purpose: overlapping/duplicate platforms, out-of-range and negative coordinates, an invalid hazard type, entities missing `id`/`patrol`, and zero coins), exported together as `debugTestLevels`.
 - **`GameScene`** loads `sampleLevel` by default and orchestrates everything below; game logic itself lives in the smaller files it composes:
-  - **`Player.ts`**: the player rectangle + arcade body. `handleInput` reads arrow/WASD + jump using `RUN_SPEED`/`JUMP_VELOCITY` from `shared/constants.ts`; `bounce()` for the enemy-stomp pop, `teleport()` for respawn, `setActive()` to hide/disable during the death effect.
+  - **`Player.ts`**: the player rectangle + arcade body. `handleInput` reads arrow/WASD + jump using `RUN_SPEED`/`JUMP_VELOCITY` from `shared/constants.ts`, plus the game-feel layer: ~100ms coyote time (jump still works briefly after leaving a platform), ~100ms jump buffering (a jump pressed briefly before landing fires on landing), variable jump height (releasing jump early clamps the ascent to half a full jump), and squash-and-stretch tweens on jump and on landing. `bounce()` for the enemy-stomp pop, `teleport()` for respawn, `setActive()` to hide/disable during the death effect.
   - **`Enemy.ts`**: a dynamic arcade body affected by gravity. Patrols `patrol` world px (scaled 0-1000 -> px like other level distances) centered on its spawn point, reversing at the range ends or when `overlapRect` finds no platform ahead of its leading edge (walking off an edge).
-  - **`AttemptState.ts`**: tracks `attempt` (starts 1, `nextAttempt()` on a death), `coins` (this attempt), and death positions for `deathsAtSpot` (deaths within 100 world px of each other, including the current one) and `timeAlive` (seconds since the attempt started, 1 decimal).
+  - **`AttemptState.ts`**: tracks `attempt` (starts 1, `nextAttempt()` on a death), `coins` (this attempt), and death positions for `deathsAtSpot` (deaths within 100 world px of each other, including the current one, also kept as `lastDeathsAtSpot` for the debug overlay) and `timeAlive` (seconds since the attempt started, 1 decimal).
   - **`deathEffects.ts`** / **`particles.ts`**: screen shake + red flash + a particle burst on death; `particles.ts`'s `burstParticles()` is reused for the (smaller, coin-colored) coin-collect burst.
   - **`Hud.ts`**: the top-left "Coins: N" counter, fixed to the camera.
   - **`WinOverlay.ts`**: the "LEVEL CLEAR" / time / coins / "press R to replay" overlay shown on reaching the goal.
+  - **`DebugOverlay.ts`**: `?debug=1`-only text (top-right) showing `attempt`/`deathsAtSpot`/`timeAlive` each frame and a `[1/2/3] test levels` hint.
 - Gameplay loop implemented in `GameScene`:
   - **Death**: overlap with a spike/lava hazard, touching an enemy from the side/below, or falling past `WORLD_H + 100`px all fire exactly one `"death"` event via `gameEvents` (guarded by a `dead` flag), then play the death effect and respawn at the level start ~600ms later with coins reset. Landing on top of an enemy (falling, feet above its midpoint) kills the enemy and bounces the player instead of killing them.
   - **Coins**: collide via overlap, disappear, trigger a particle burst, and increment the HUD counter. They reappear (and the counter resets) on respawn or replay.
   - **Win**: overlap with the goal fires `"win"` with `{ coins, timeAlive }`, shows `WinOverlay`, and locks movement (via the same `locked` flag death uses).
   - **R** replays the level: resets to the start with coins/time cleared and the win overlay (if any) dismissed, without counting as a death or incrementing `attempt`.
+  - **Debug only (`?debug=1`)**: hitboxes are drawn (Arcade's own debug renderer), the debug text overlay is shown, and pressing `1`/`2`/`3` loads `easyLevel`/`spikeGauntletLevel`/`messyLevel` via `this.scene.restart()` (through the same sanitize -> `LevelSchema.parse` pipeline as `loadLevel`).
 - Fields on `GameScene`: `player` (`Player`), `platforms` (static group), `hazards`, `coins` (rectangle lists, each with its level `id` in `getData("id")`), `enemies` (`Enemy[]`), `goal`.
 
 ## UI (`client/src/ui`)
@@ -106,12 +111,10 @@ Level coordinate conventions (as the game currently interprets them):
 - Dev (prior scaffold pass): the game renders, the player runs and jumps and lands on platforms, and `loadLevel(customLevel)` rebuilds the scene with no refresh and a single canvas.
 - The `/api` proxy from Vite to Express works.
 - Production (`npm run build && npm start`): serves the client at `/`, falls back to `index.html` for unknown routes, and still returns JSON for `/api`.
-- The gameplay loop above (death/respawn/coins/win/enemy patrol) has only been verified with `npm run typecheck` and `npm run build` so far, not by driving it in a browser yet — see "How to test" below for what to click through next.
+- The gameplay loop (death/respawn/coins/win/enemy patrol) and the game-feel/debug-tools pass on top of it have only been verified with `npm run typecheck` and `npm run build` so far, not by driving it in a browser yet — see "How to test" below for what to click through next.
 
 ## Not done yet
 
-- Game feel: coyote time, jump buffering, variable jump height (release-early = shorter jump), squash-and-stretch on jump/land.
-- Debug tools behind `?debug=1` (hitboxes, attempt/deathsAtSpot/timeAlive overlay, `testLevels.ts` with 1/2/3 level switching, including a deliberately messy level to prove `loadLevel` doesn't crash on bad entities).
 - Real `/api/level` (sketch to Gemini to `Level`, validated with `LevelSchema`) and `/api/roast`.
 - Sketch upload and other UI screens.
 - Sample sketches in `samples/`.
@@ -137,6 +140,17 @@ Open the client URL and drive `sampleLevel` (the default level `GameScene` loads
 - **Enemy patrol**: watch `enemy-1` walk back and forth without falling off `ground-2` or wandering past its patrol range.
 - **Win**: reach the goal rectangle (`goal`), confirm a single `"win"` event with `{ coins, timeAlive }`, the "LEVEL CLEAR" overlay, and that movement is locked.
 - **Replay**: press `R` (both mid-attempt and after winning) and confirm it returns to the start with coins/time reset, the win overlay (if shown) is dismissed, and it does **not** increment `attempt` or fire a death.
+- **Coyote time**: run off the edge of a platform without jumping and press jump within ~100ms of leaving it — it should still jump.
+- **Jump buffer**: press jump ~100ms before landing (e.g. while still falling onto a platform) — it should jump immediately on landing instead of ignoring the press.
+- **Variable jump height**: hold jump for a full jump vs. tap-and-release early — the early release should cut the jump noticeably shorter.
+- **Squash and stretch**: watch the player rectangle stretch vertically on jump and squash on landing.
+
+Then reload with `?debug=1` appended to the client URL (e.g. `http://localhost:5173/?debug=1`) and:
+
+- **Hitboxes**: confirm Arcade's debug outlines are drawn over the player, platforms, hazards, coins, enemies, and the goal.
+- **Debug text**: confirm the top-right overlay shows `attempt`, `deathsAtSpot`, and `timeAlive`, updating live.
+- **Test levels**: press `1` for `easyLevel`, `2` for `spikeGauntletLevel`, `3` for `messyLevel`, and confirm each loads (no page refresh) with attempt/coins/deaths reset.
+- **Messy level (`3`) doesn't crash**: confirm it loads without a thrown error or blank screen despite its duplicate/overlapping platforms, out-of-range and negative coordinates, invalid hazard type, entities missing `id`/`patrol`, and empty coins array — i.e. `sanitizeLevel` clamped/dropped the bad parts instead of `loadLevel` throwing.
 
 ## Known quirks
 
