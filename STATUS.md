@@ -87,7 +87,7 @@ Files in `server/`:
 - `index.ts`: JSON body limit 20 MB, one-line request log for `/api`, JSON 404 for unknown `/api` routes, and a global JSON error handler.
 - `.env` is loaded from the repo root. In production the server runs through `tsx` (no compile step), because `shared` is TypeScript source.
 
-Scripts (from the repo root, `-w server`): `test:validate` (validator, sanitizer, fallback levels), `test:pipeline` (repair loop, fallback, memory + disk cache, mock mode, daily cap, record/replay and the live-roast gate; fully offline, `scripts/offline-env.ts` swaps in a fake key and temp dirs first), `test:roast` (offline format checks, then 5 death contexts against the model when a key is set), `run-samples` (runs every image in `samples/` through the full pipeline and prints level name, entity counts, reachable, repairs, fallback, ms).
+Scripts (from the repo root, `-w server`): `test:validate` (validator, sanitizer, fallback levels), `test:pipeline` (repair loop, fallback, memory + disk cache, mock mode, daily cap, record/replay and the live-roast gate; fully offline, `scripts/offline-env.ts` swaps in a fake key and temp dirs first), `test:roast` (offline format checks, then 5 death contexts x 3 runs against the model, 15 calls) and `run-samples` (runs every image in `samples/` through the full pipeline and prints level name, entity counts, reachable, repairs, fallback, ms; up to 3 calls per image). **The last two spend real quota and refuse to run without `--live`**: without it they print the estimated call count and today's usage (from `budget.ts`) and exit 1; with it (`npm run test:roast -w server -- --live`) they respect `GEMINI_DAILY_CAP` and abort mid-run when it is reached. The shared guard is `scripts/live-guard.ts`.
 
 ## Client game (`client/src/game`)
 
@@ -201,7 +201,7 @@ Touch-only caveats: audio unlocks on the first tap; there is no touch mute or re
 - **Timeouts and models (env):** `GEMINI_ROAST_TIMEOUT_MS` (default 2500; roast calls also run with SDK retries off so a 429 or slow call falls straight to the canned line), `GEMINI_MODEL`, `GEMINI_ROAST_MODEL`, `GEMINI_ROAST_THINKING`, `GEMINI_LEVEL_THINKING`. Level generation keeps the SDK's default retries, but each call's timeout is capped by what is left of the ~8s level budget, so retries cannot push a scan past it.
 - **Client cutoff (dev 3's roast fetch) should be `GEMINI_ROAST_TIMEOUT_MS` + ~500ms** (3000ms at the default) so the server's canned line still arrives instead of the client giving up first. It was 1500ms when the server timeout was 1200ms.
 - Last measurement (free tier, before the daily cap): roast calls at `low` thinking took ~1.6-3.4s typical with occasional 11-12s spikes, so expect some canned lines even at 2500ms. With retries off, a 429 falls back in ~150-500ms. Real numbers on the paid tier are still to be measured.
-- `npm run test:roast -w server` runs each death context 3 times and prints min/median/max latency and the MODEL vs FALLBACK count.
+- `npm run test:roast -w server -- --live` runs each death context 3 times and prints min/median/max latency and the MODEL vs FALLBACK count.
 
 ## Known quirks
 
