@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { WORLD_H, WORLD_W } from "@sketchquest/shared";
 import { HAND_FONT } from "./fonts";
+import { INK_CSS } from "./palette";
 
 const DEPTH = 1500;
 const RISE_PX = 100;
@@ -20,7 +21,7 @@ export function floatText(scene: Phaser.Scene, message: string, x: number, y: nu
         fontFamily: HAND_FONT,
         fontSize: "60px",
         color,
-        stroke: "#ffffff",
+        stroke: INK_CSS.paper,
         strokeThickness: 9,
       }
     )
