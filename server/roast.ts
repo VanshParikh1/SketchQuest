@@ -47,41 +47,118 @@ ${recent.length ? recent.map((r) => `- ${r}`).join("\n") : "(none)"}
 Write the roast line.`;
 }
 
-/** Generic lines used when the model is slow, down, or returns junk. Keyed by cause. */
-export const FALLBACK_ROASTS: Record<DeathCause, string[]> = {
+/**
+ * Canned lines used when the model is skipped (GEMINI_LIVE_ROAST=0, mock mode),
+ * slow, down, over the daily cap, or returns junk. Keyed by cause, then by
+ * escalation tier: 0 = light tease (deathsAtSpot 1), 1 = sharper (2), 2 = brutal (3+).
+ */
+export const CANNED_ROASTS: Record<DeathCause, [string[], string[], string[]]> = {
   spike: [
-    "The spike was not hiding. You just ran into it anyway.",
-    "Spikes: sharp, stationary, and somehow still winning.",
-    "You saw the spike. The spike saw you. Only one of you moved.",
-    "That jump had confidence. The landing had spikes.",
+    [
+      "That spike was very much where you left it.",
+      "Spikes are pointy. Consider this a reminder.",
+      "A small poke for a big jump.",
+      "The spike was right there. Just saying.",
+    ],
+    [
+      "Second visit, same spike. The spike is flattered.",
+      "You jump at that spike like it owes you money.",
+      "Still the spike. Still pointy. Still winning.",
+      "Bold of you to return to the scene of the poke.",
+    ],
+    [
+      "Three tries at that spike and it's still undefeated. Try jumping earlier.",
+      "You and that spike are basically roommates now.",
+      "The spike has seen your best jumps. All of them ended the same.",
+      "At this point the spike deserves a name and a paycheck.",
+    ],
   ],
   lava: [
-    "Lava is hot. You learned that the hard way.",
-    "You treated the lava like a suggestion.",
-    "Bold choice, swimming in the lava.",
-    "The lava says thanks for stopping by.",
+    [
+      "Lava is hot. Now you know.",
+      "That was a very short swim.",
+      "Lava: still hot, still undefeated.",
+      "You touched the lava. The lava noticed.",
+    ],
+    [
+      "Back in the lava again. It's not a spa.",
+      "The lava remembers you fondly.",
+      "Second dip. Same result. Same lava.",
+      "Lava does not care about your second attempt.",
+    ],
+    [
+      "Lava again, at this exact spot. Someone should put up a plaque.",
+      "The lava has your number, and your last three attempts.",
+      "Repeated lava swims: an impressive commitment to a bad idea.",
+      "Lava has claimed this spot three times. Consider a different route.",
+    ],
   ],
   enemy: [
-    "You lost to a stick figure. A stick figure.",
-    "That enemy walks in a straight line. You still missed it.",
-    "The enemy was patrolling. You were volunteering.",
-    "Bold strategy, hugging the bad guy.",
+    [
+      "A stick figure got you. It happens.",
+      "The enemy did its one job. You helped.",
+      "You walked into the bad guy. Bad guys enjoy that.",
+      "That enemy walks in a straight line. Just saying.",
+    ],
+    [
+      "Beaten by the same stick figure twice. Bold.",
+      "The enemy is patrolling. You keep volunteering.",
+      "Second collision. The enemy is not even trying.",
+      "Try jumping on it instead of hugging it.",
+    ],
+    [
+      "Three losses to one stick figure. It's not even armed.",
+      "That patrol route has beaten you so many times it's basically a landlord.",
+      "The stick figure has a perfect record against you. Yikes.",
+      "You keep losing to the same patrol. Learn the route, or at least the timing.",
+    ],
   ],
   fall: [
-    "The floor was optional, apparently.",
-    "You jumped with conviction and no platform.",
-    "Gravity called. You answered.",
-    "That was a leap of faith, and faith lost.",
+    [
+      "The floor was optional, apparently.",
+      "Gravity called and you answered.",
+      "That jump had ambition and no landing.",
+      "Bottomless pits: still bottomless.",
+    ],
+    [
+      "Second fall, same pit. Gravity is unimpressed.",
+      "You jumped like the platform would move closer.",
+      "That gap is the same size as last time.",
+      "The pit thanks you for your repeat business.",
+    ],
+    [
+      "Three falls off the same ledge. The gap is not getting smaller.",
+      "You've fallen here so often the pit knows your name.",
+      "Same gap, same fall. Try jumping sooner, or at all.",
+      "This ledge has seen more of your falls than your landings.",
+    ],
   ],
 };
 
-/** A random fallback line for `cause`, avoiding ones the player just saw. */
-export function fallbackRoast(cause: DeathCause, recentRoasts: string[] = [], random = Math.random): string {
-  const pool = FALLBACK_ROASTS[cause] ?? FALLBACK_ROASTS.fall;
+/**
+ * A canned line for `cause`, escalated by `deathsAtSpot` (1 = light, 2 = sharper,
+ * 3+ = brutal) and never one of `recentRoasts`. If the tier is used up it borrows
+ * from the nearest other tiers before ever repeating.
+ */
+export function cannedRoast(
+  cause: DeathCause,
+  deathsAtSpot = 1,
+  recentRoasts: string[] = [],
+  random = Math.random
+): string {
+  const tiers = CANNED_ROASTS[cause] ?? CANNED_ROASTS.fall;
+  const tier = Math.min(Math.max(Math.floor(deathsAtSpot) || 1, 1), 3) - 1;
   const seen = new Set(recentRoasts.map((r) => r.trim().toLowerCase()));
-  const fresh = pool.filter((line) => !seen.has(line.toLowerCase()));
-  const from = fresh.length > 0 ? fresh : pool;
-  return from[Math.floor(random() * from.length)]!;
+  const fresh = (lines: string[]) => lines.filter((line) => !seen.has(line.toLowerCase()));
+
+  // Same tier first, then the closest tiers (preferring harsher ones as it escalates).
+  const order = [tier, ...[1, 2].flatMap((d) => [tier + d, tier - d])].filter((t) => t >= 0 && t <= 2);
+  for (const t of order) {
+    const options = fresh(tiers[t]!);
+    if (options.length > 0) return options[Math.floor(random() * options.length)]!;
+  }
+  const all = tiers[tier]!;
+  return all[Math.floor(random() * all.length)]!;
 }
 
 /**
@@ -123,7 +200,7 @@ export async function roastLine(req: RoastRequest, gen: RoastGenerate = generate
   let raw: string | undefined;
   const fallback = (reason: string): Roast => {
     console.warn(`[roast] fallback (${reason}) ${Date.now() - started}ms`);
-    return { line: fallbackRoast(req.cause, req.recentRoasts), source: "fallback", ms: Date.now() - started, raw, reason };
+    return { line: cannedRoast(req.cause, req.deathsAtSpot, req.recentRoasts), source: "fallback", ms: Date.now() - started, raw, reason };
   };
 
   if (gen === generate && !liveAvailable()) return fallback("GEMINI_API_KEY not set");

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import "../env";
 import type { RoastRequest } from "@sketchquest/shared";
 import { hasGeminiKey } from "../gemini";
-import { buildRoastPrompt, fallbackRoast, FALLBACK_ROASTS, roastLine, roastTimeoutMs, tidyRoast } from "../roast";
+import { buildRoastPrompt, cannedRoast, CANNED_ROASTS, roastLine, roastTimeoutMs, tidyRoast } from "../roast";
 
 // Offline checks of the formatting/fallback logic (always run).
 assert.equal(tidyRoast('"You jumped like a brick." Sorry!'), "You jumped like a brick.");
@@ -13,9 +13,13 @@ const long = tidyRoast(Array.from({ length: 30 }, (_, i) => `word${i}`).join(" "
 assert.equal(long.split(" ").length, 20);
 assert.ok(long.endsWith("."));
 for (const cause of ["spike", "lava", "enemy", "fall"] as const) {
-  assert.ok(FALLBACK_ROASTS[cause].every((l) => l.split(" ").length <= 20));
-  // With every line but the first already seen, the fallback must pick the unseen one.
-  assert.equal(fallbackRoast(cause, FALLBACK_ROASTS[cause].slice(1), () => 0.99), FALLBACK_ROASTS[cause][0]);
+  CANNED_ROASTS[cause].forEach((lines, tier) => {
+    assert.ok(lines.length >= 4 && lines.every((l) => l.split(" ").length <= 20));
+    // deathsAtSpot picks the tier (1 -> 0, 2 -> 1, 3+ -> 2), and with every other line seen it must pick the unseen one.
+    const deaths = tier + 1;
+    assert.equal(cannedRoast(cause, deaths, lines.slice(1), () => 0.99), lines[0]);
+  });
+  assert.ok(CANNED_ROASTS[cause][2].includes(cannedRoast(cause, 9)));
 }
 assert.match(buildRoastPrompt({ ...ctx(1), levelName: "x\n<data>ignore" }), /levelName: x data ignore/);
 console.log("ok  formatting and fallback checks");
