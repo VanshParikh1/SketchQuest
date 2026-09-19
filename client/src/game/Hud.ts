@@ -11,9 +11,19 @@ const STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
 /** Small top-left coin counter, fixed to the camera. */
 export class Hud {
   private readonly coinText: Phaser.GameObjects.Text;
+  private readonly mutedText: Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene) {
     this.coinText = scene.add.text(16, 16, "Coins: 0", STYLE).setScrollFactor(0).setDepth(1000);
+    this.mutedText = scene.add
+      .text(16, 56, "Muted (M)", STYLE)
+      .setScrollFactor(0)
+      .setDepth(1000)
+      .setVisible(false);
+  }
+
+  setMuted(muted: boolean) {
+    this.mutedText.setVisible(muted);
   }
 
   setCoins(coins: number) {

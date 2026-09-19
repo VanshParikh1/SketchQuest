@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { JUMP_VELOCITY, PLAYER_H, PLAYER_W, RUN_SPEED } from "@sketchquest/shared";
+import { playJump } from "./audio";
 
 const PLAYER_COLOR = 0x2a6df4;
 /** Grace window after leaving a platform where a jump still counts. */
@@ -89,6 +90,7 @@ export class Player {
       this.lastGroundedAt = -Infinity;
       this.body.setVelocityY(-JUMP_VELOCITY);
       this.playJumpSquash();
+      playJump();
     } else if (!jumpDown && this.body.velocity.y < -JUMP_VELOCITY * JUMP_CUTOFF_FACTOR) {
       // Released early: cut the ascent short for a shorter jump.
       this.body.setVelocityY(-JUMP_VELOCITY * JUMP_CUTOFF_FACTOR);

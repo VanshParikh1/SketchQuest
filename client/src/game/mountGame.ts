@@ -3,6 +3,7 @@ import { GRAVITY, WORLD_H, WORLD_W } from "@sketchquest/shared";
 import { GameScene, GAME_SCENE_KEY } from "./GameScene";
 import { prepareLevel } from "./prepareLevel";
 import { DEBUG } from "./debug";
+import { installAudioUnlock } from "./audio";
 
 export type GameHandle = {
   game: Phaser.Game;
@@ -19,6 +20,7 @@ export type GameHandle = {
 let current: GameHandle | null = null;
 
 export function mountGame(el: HTMLElement): GameHandle {
+  installAudioUnlock();
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: el,

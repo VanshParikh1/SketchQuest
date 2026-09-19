@@ -18,6 +18,7 @@ import { burstParticles } from "./particles";
 import { Hud } from "./Hud";
 import { WinOverlay } from "./WinOverlay";
 import { LevelIntro } from "./LevelIntro";
+import { isMuted, playCoin, playDeath, playStomp, playWin, toggleMute } from "./audio";
 import { DebugOverlay } from "./DebugOverlay";
 import { DEBUG } from "./debug";
 import { debugTestLevels } from "./testLevels";
@@ -62,6 +63,7 @@ export class GameScene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: Record<"W" | "A" | "D", Phaser.Input.Keyboard.Key>;
   private restartKey!: Phaser.Input.Keyboard.Key;
+  private muteKey!: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super(GAME_SCENE_KEY);
@@ -139,6 +141,8 @@ export class GameScene extends Phaser.Scene {
     this.cursors = kb.createCursorKeys();
     this.keys = kb.addKeys("W,A,D") as typeof this.keys;
     this.restartKey = kb.addKey("R");
+    this.muteKey = kb.addKey("M");
+    this.hud.setMuted(isMuted());
 
     if (DEBUG) {
       this.debugOverlay = new DebugOverlay(this);
@@ -151,6 +155,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   update() {
+    if (Phaser.Input.Keyboard.JustDown(this.muteKey)) this.hud.setMuted(toggleMute());
+
     if (Phaser.Input.Keyboard.JustDown(this.restartKey) && !this.dead && !this.intro) {
       this.replay();
       return;
@@ -198,6 +204,7 @@ export class GameScene extends Phaser.Scene {
     if (isStomp) {
       enemy.kill();
       this.player.bounce(STOMP_BOUNCE_VELOCITY);
+      playStomp();
     } else {
       this.triggerDeath("enemy", this.player.x, this.player.y);
     }
@@ -208,6 +215,7 @@ export class GameScene extends Phaser.Scene {
     coin.setVisible(false);
     (coin.body as Phaser.Physics.Arcade.Body).enable = false;
     this.attemptState.collectCoin();
+    playCoin();
     burstParticles(this, coin.x, coin.y, { color: COLORS.coin, count: 10, speed: [40, 100], size: 5, duration: 350 });
   }
 
@@ -237,6 +245,7 @@ export class GameScene extends Phaser.Scene {
 
     this.player.setActive(false);
     playDeathEffect(this, x, y, cause);
+    playDeath();
 
     this.time.delayedCall(DEATH_EFFECT_MS, () => this.respawn());
   }
@@ -259,6 +268,7 @@ export class GameScene extends Phaser.Scene {
       timeAlive: this.attemptState.timeAlive(this),
     };
     gameEvents.emit("win", payload);
+    playWin();
     this.winOverlay = new WinOverlay(this, payload);
   }
 
