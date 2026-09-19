@@ -1,5 +1,6 @@
 import "./env";
 import { GoogleGenAI } from "@google/genai";
+import { reserveCall } from "./budget";
 
 /** Model for level generation. Override with GEMINI_MODEL. */
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
@@ -93,8 +94,9 @@ export async function generate(options: GenerateOptions): Promise<string> {
   const temperature = temperatureSupported ? options.temperature : undefined;
   const ai = getClient();
 
-  const call = (signal: AbortSignal, temp: number | undefined) =>
-    ai.interactions.create(
+  const call = (signal: AbortSignal, temp: number | undefined) => {
+    reserveCall(label); // counts against GEMINI_DAILY_CAP; throws BudgetExceededError when spent
+    return ai.interactions.create(
       {
         model: options.model ?? GEMINI_MODEL,
         system_instruction: system,
@@ -116,6 +118,7 @@ export async function generate(options: GenerateOptions): Promise<string> {
         },
       }
     );
+  };
 
   const text = await withTimeout(label, timeoutMs, async (signal) => {
     try {
