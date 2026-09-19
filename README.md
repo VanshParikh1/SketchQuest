@@ -16,6 +16,7 @@ photo (JPEG) ──► POST /api/level ──► Gemini vision (structured JSON)
 
 - **Marker legend** the model is told: black = platforms, red = spikes/lava, green = goal, yellow = coins, blue circle = start, stick figure = enemy.
 - **Always playable.** `/api/level` never returns a 500 for a Gemini problem. On any error, timeout, or an unbeatable result it returns a hand-made level with `meta.fallback: true`.
+- **Verified with the real model.** Real phone photos have been scanned end to end: about 9s typically (one took 35s), with no repair rounds needed in 3 of 3. Level timeouts are generous on purpose (see the env table); a scan takes as long as it needs.
 - **Quota-safe by default.** Mock mode, a daily call cap, an on-disk cache, and record/replay fixtures mean the whole app can run with zero Gemini calls. See [Spending and quota](#spending-and-quota).
 
 ## Quick start
@@ -33,6 +34,21 @@ Requires Node >= 20.11.
 **Controls:** arrow keys / WASD to run, up / W / space to jump, **R** to replay, **M** to mute. Touch devices get on-screen buttons (or add `?touch=1`). Add `?debug=1` for hitboxes and hotkeys `1`/`2`/`3` that load test levels.
 
 To use the real model, set `GEMINI_API_KEY` in `.env`, set `GEMINI_MOCK=0`, and read [Spending and quota](#spending-and-quota) first.
+
+### Testing on your phone
+
+The dev server listens on all interfaces (`server.host: true`) and accepts any hostname (`server.allowedHosts: true`) in `client/vite.config.ts`, and `/api` is proxied, so one URL serves both the game and the API.
+
+- **Same wifi:** open the **Network** URL Vite prints (`http://<your-lan-ip>:5173`). Photo upload through the file picker works, but the live camera preview needs HTTPS.
+- **HTTPS (camera works):** tunnel the dev server with Cloudflare, no account needed:
+
+```bash
+brew install cloudflared                            # once
+npm run dev
+cloudflared tunnel --url http://localhost:5173      # prints https://<random>.trycloudflare.com
+```
+
+The tunnel URL is public and changes every time you start it, and Cloudflare cuts any single request at about 100 seconds, so an unusually slow scan can fail through the tunnel. Anyone with the URL can trigger scans, so keep `GEMINI_DAILY_CAP` set. Each new photo costs 1 call (up to 3 with repairs); repeat scans of the same file are free.
 
 ## Scripts
 
@@ -73,7 +89,7 @@ Everything below is read at request time; booleans accept `1`/`true`. The free t
 | `GEMINI_LIVE_ROAST=0` (default) | Roasts come from the canned escalating pool even if a key is set. Keep it `0` until the AI narrator is switched on |
 | `GEMINI_DAILY_CAP=15` (default) | Max real requests per local day, counting repair rounds. Persisted in `server/.cache/usage.json`, resets at local midnight. At the cap, live calls are skipped and fallbacks are used (logged once). `0` = unlimited |
 | Level cache | Results are cached in memory and on disk (`server/.cache/levels/<image hash>.json`, gitignored) by image hash, so a repeat scan costs no call, even after a restart. Fallbacks are never cached |
-| `GEMINI_RECORD=1` / `GEMINI_REPLAY=1` | Save every real response to `server/fixtures/` (commit them), then serve from them with zero API calls. Filenames hash the prompt, so a prompt change needs a re-record |
+| `GEMINI_RECORD=1` / `GEMINI_REPLAY=1` | Save every real response to `server/fixtures/` (commit them), then serve from them with zero API calls. Filenames hash the prompt, so a prompt change needs a re-record. A few real level responses are already committed |
 
 `GET /api/usage` (not registered in production) shows today's count against the cap.
 
@@ -115,6 +131,7 @@ Camera capture needs HTTPS, so test from a phone on the deployed URL. Never comm
 | `GEMINI_MODEL` | `gemini-3.8-flash` | Level generation model |
 | `GEMINI_ROAST_MODEL` | `GEMINI_MODEL` | Roast model |
 | `GEMINI_LEVEL_THINKING` / `GEMINI_ROAST_THINKING` | `low` | `low`, `medium` or `high` (`minimal` is rejected by the API) |
+| `GEMINI_LEVEL_TIMEOUT_MS` / `GEMINI_LEVEL_REPAIR_TIMEOUT_MS` / `GEMINI_LEVEL_BUDGET_MS` | `120000` / `120000` / `300000` | Timeouts for the first level call, each repair call, and the whole scan. A vision call with JSON output took longer than the original 6s, which silently produced a fallback level |
 | `GEMINI_ROAST_TIMEOUT_MS` | `2500` | Server-side roast timeout. The client cutoff should be this + ~500ms |
 | `PORT` | `3001` | Injected by the platform |
 
