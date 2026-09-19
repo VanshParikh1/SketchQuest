@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import "../env";
 import type { RoastRequest } from "@sketchquest/shared";
 import { hasGeminiKey } from "../gemini";
-import { buildRoastPrompt, fallbackRoast, FALLBACK_ROASTS, roastLine, tidyRoast } from "../roast";
+import { buildRoastPrompt, fallbackRoast, FALLBACK_ROASTS, roastLine, roastTimeoutMs, tidyRoast } from "../roast";
 
 // Offline checks of the formatting/fallback logic (always run).
 assert.equal(tidyRoast('"You jumped like a brick." Sorry!'), "You jumped like a brick.");
@@ -33,15 +33,47 @@ const contexts: RoastRequest[] = [
 ];
 
 console.log(`\n${hasGeminiKey() ? "GEMINI_API_KEY set: calling the model" : "No GEMINI_API_KEY: showing fallback lines only"}\n`);
+const RUNS = 3;
+const median = (xs: number[]) => {
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
+};
+
+const allMs: number[] = [];
+const modelMs: number[] = [];
 let modelCount = 0;
+let total = 0;
+const failures = new Map<string, number>();
+
 for (const c of contexts) {
-  const { line, source, ms, raw, reason } = await roastLine(c);
-  const words = line.split(/\s+/).length;
-  assert.ok(words <= 20, `over 20 words: ${line}`);
-  if (source === "model") modelCount++;
-  console.log(`\n[${c.cause} x${c.deathsAtSpot}] ${source === "model" ? "MODEL" : "FALLBACK"}  ${ms}ms  ${words} words`);
-  if (source === "fallback") console.log(`  why:  ${reason}`);
-  if (raw !== undefined) console.log(`  raw:  ${JSON.stringify(raw)}`);
-  console.log(`  line: ${line}`);
+  const ms: number[] = [];
+  let model = 0;
+  console.log(`\n[${c.cause} x${c.deathsAtSpot}]`);
+  for (let run = 1; run <= RUNS; run++) {
+    const r = await roastLine(c);
+    const words = r.line.split(/\s+/).length;
+    assert.ok(words <= 20, `over 20 words: ${r.line}`);
+    ms.push(r.ms);
+    allMs.push(r.ms);
+    total++;
+    if (r.source === "model") {
+      model++;
+      modelCount++;
+      modelMs.push(r.ms);
+    } else {
+      const why = (r.reason ?? "unknown").slice(0, 90);
+      failures.set(why, (failures.get(why) ?? 0) + 1);
+    }
+    console.log(`  #${run} ${r.source === "model" ? "MODEL   " : "FALLBACK"} ${String(r.ms).padStart(5)}ms  ${r.line}`);
+    if (r.raw !== undefined && r.raw.trim() !== r.line) console.log(`       raw: ${JSON.stringify(r.raw)}`);
+    if (r.source === "fallback") console.log(`       why: ${r.reason}`);
+  }
+  console.log(`  -> min ${Math.min(...ms)}ms / median ${median(ms)}ms / max ${Math.max(...ms)}ms, ${model} MODEL / ${RUNS - model} FALLBACK`);
 }
-console.log(`\n${modelCount}/${contexts.length} lines came from the model, ${contexts.length - modelCount} from the fallback pool.`);
+
+console.log(`\n=== ${total} calls, timeout ${roastTimeoutMs()}ms ===`);
+console.log(`all:   min ${Math.min(...allMs)}ms / median ${median(allMs)}ms / max ${Math.max(...allMs)}ms`);
+if (modelMs.length) console.log(`model: min ${Math.min(...modelMs)}ms / median ${median(modelMs)}ms / max ${Math.max(...modelMs)}ms`);
+console.log(`${modelCount} MODEL / ${total - modelCount} FALLBACK`);
+for (const [why, n] of failures) console.log(`  fallback x${n}: ${why}`);
