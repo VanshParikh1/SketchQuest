@@ -17,12 +17,12 @@ app.get("/api/health", (_req, res) => {
 
 // Stub: will take a sketch image and return a Gemini-generated level.
 app.post("/api/level", (_req, res) => {
-  res.json({ level: sampleLevel } satisfies LevelResponse);
+  res.json({ level: sampleLevel, meta: { repairs: 0, fallback: true } } satisfies LevelResponse);
 });
 
 // Stub: will take death/win events and return a Gemini-generated roast.
 app.post("/api/roast", (_req, res) => {
-  res.json({ roast: "You died to a doodle. A DOODLE." } satisfies RoastResponse);
+  res.json({ line: "You died to a doodle. A DOODLE." } satisfies RoastResponse);
 });
 
 // Production: one service serves the built client.

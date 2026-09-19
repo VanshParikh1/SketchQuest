@@ -24,7 +24,8 @@ export type Hazard = Level["hazards"][number];
 export type Coin = Level["coins"][number];
 export type Enemy = Level["enemies"][number];
 
-export type DeathCause = "spike" | "lava" | "enemy" | "fall";
+export const DeathCauseSchema = z.enum(["spike", "lava", "enemy", "fall"]);
+export type DeathCause = z.infer<typeof DeathCauseSchema>;
 
 export type DeathEvent = {
   cause: DeathCause;

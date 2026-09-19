@@ -172,7 +172,15 @@ function parseLevelResponse(payload: unknown): LevelResponse {
     throw new Error("The server returned a level Sketchquest could not load.");
   }
 
-  return { level: parsed.data };
+  const meta = "meta" in payload ? payload.meta : undefined;
+  const repairs = isRecord(meta) && typeof meta.repairs === "number" ? meta.repairs : 0;
+  const fallback = isRecord(meta) && meta.fallback === true;
+
+  return { level: parsed.data, meta: { repairs, fallback } };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export function App() {
