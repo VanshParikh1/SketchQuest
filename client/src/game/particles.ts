@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { DEPTH } from "./palette";
 
 export type BurstOptions = {
   color?: number;
@@ -18,16 +19,31 @@ const DEFAULTS: Required<Omit<BurstOptions, "arc">> = {
   duration: 500,
 };
 
+/** Hard cap on live particles per scene, so stacked effects can't bog down a phone. */
+const MAX_LIVE_PARTICLES = 60;
+const live = new WeakMap<Phaser.Scene, number>();
+
+/** Call when a scene (re)starts: its tweens were killed without completing, so the count is stale. */
+export function resetParticleBudget(scene: Phaser.Scene) {
+  live.set(scene, 0);
+}
+
 /** A quick burst of small colored squares flying out from (x, y) and fading. */
 export function burstParticles(scene: Phaser.Scene, x: number, y: number, opts: BurstOptions = {}) {
   const { color, count, speed, size, duration } = { ...DEFAULTS, ...opts };
   const { arc } = opts;
-  for (let i = 0; i < count; i++) {
+  const room = MAX_LIVE_PARTICLES - (live.get(scene) ?? 0);
+  const n = Math.max(0, Math.min(count, room));
+  live.set(scene, (live.get(scene) ?? 0) + n);
+  for (let i = 0; i < n; i++) {
     const angle = arc
       ? arc[0] + Math.random() * (arc[1] - arc[0])
-      : (Math.PI * 2 * i) / count + Math.random() * 0.3;
+      : (Math.PI * 2 * i) / n + Math.random() * 0.3;
     const s = speed[0] + Math.random() * (speed[1] - speed[0]);
-    const particle = scene.add.rectangle(x, y, size, size, color);
+    const particle = scene.add
+      .rectangle(x, y, size, size, color)
+      .setDepth(DEPTH.particles)
+      .setAngle(Math.random() * 90);
     scene.tweens.add({
       targets: particle,
       x: x + Math.cos(angle) * s,
@@ -35,7 +51,10 @@ export function burstParticles(scene: Phaser.Scene, x: number, y: number, opts: 
       alpha: 0,
       duration,
       ease: "Cubic.easeOut",
-      onComplete: () => particle.destroy(),
+      onComplete: () => {
+        particle.destroy();
+        live.set(scene, Math.max(0, (live.get(scene) ?? 1) - 1));
+      },
     });
   }
 }
