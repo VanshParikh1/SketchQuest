@@ -4,6 +4,7 @@ import "../env";
 import { validateLevel } from "@sketchquest/shared";
 import { levelFromSketch } from "../levelFromSketch";
 import { liveAvailable } from "../gemini";
+import { announceCapAbort, capReached, requireLive } from "./live-guard";
 
 const SAMPLES_DIR = path.resolve(import.meta.dirname, "../../samples");
 const MIME: Record<string, string> = {
@@ -21,6 +22,8 @@ if (files.length === 0) {
   console.log(`No images in ${SAMPLES_DIR}. Add .jpg/.png/.webp sketches and rerun.`);
   process.exit(0);
 }
+// Worst case per sample: 1 generation + 2 repair rounds.
+requireLive(files.length * 3, `${files.length} samples x 3 (1 call + up to 2 repairs each)`);
 if (!liveAvailable()) {
   console.warn("GEMINI_API_KEY is not set (and GEMINI_REPLAY is off): every sample will use a fallback level.\n");
 }
@@ -29,7 +32,12 @@ if (process.env.GEMINI_MOCK) console.warn("GEMINI_MOCK only affects the HTTP end
 type Row = Record<string, string | number | boolean>;
 const rows: Row[] = [];
 
+let aborted = false;
 for (const file of files) {
+  if (capReached()) {
+    aborted = true;
+    break;
+  }
   const data = fs.readFileSync(path.join(SAMPLES_DIR, file)).toString("base64");
   const started = Date.now();
   const { level, meta } = await levelFromSketch(
@@ -47,9 +55,15 @@ for (const file of files) {
   });
 }
 
-console.table(rows);
-const ms = rows.map((r) => r.ms as number);
-console.log(
-  `${rows.filter((r) => !r.fallback).length}/${rows.length} real levels, ` +
-    `avg ${Math.round(ms.reduce((a, b) => a + b, 0) / ms.length)}ms, max ${Math.max(...ms)}ms`
-);
+if (rows.length > 0) {
+  console.table(rows);
+  const ms = rows.map((r) => r.ms as number);
+  console.log(
+    `${rows.filter((r) => !r.fallback).length}/${rows.length} real levels, ` +
+      `avg ${Math.round(ms.reduce((a, b) => a + b, 0) / ms.length)}ms, max ${Math.max(...ms)}ms`
+  );
+}
+if (aborted) {
+  announceCapAbort(rows.length, files.length, "samples");
+  process.exit(1);
+}
