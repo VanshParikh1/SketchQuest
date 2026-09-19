@@ -75,7 +75,8 @@ export type GenerateOptions = {
   label: string;
   system: string;
   input: string | InputPart[];
-  timeoutMs: number;
+  /** Abort after this many ms. Omit for no time limit (level generation). */
+  timeoutMs?: number;
   model?: string;
   /** JSON schema for structured output. Omit for plain text. */
   schema?: Record<string, unknown>;
@@ -124,7 +125,7 @@ async function generateLive(options: GenerateOptions): Promise<string> {
         ...(schema && { response_format: { type: "text", mime_type: "application/json", schema } }),
       },
       {
-        timeout_ms: timeoutMs,
+        ...(timeoutMs !== undefined && { timeout_ms: timeoutMs }),
         ...(noRetries && { retries: { strategy: "none" as const } }),
         fetch_options: { signal },
         // extra_body replaces generation_config wholesale, so it carries every field.
@@ -139,7 +140,7 @@ async function generateLive(options: GenerateOptions): Promise<string> {
     );
   };
 
-  const text = await withTimeout(label, timeoutMs, async (signal) => {
+  const run = async (signal: AbortSignal) => {
     try {
       return (await call(signal, temperature)).output_text;
     } catch (error) {
@@ -153,7 +154,8 @@ async function generateLive(options: GenerateOptions): Promise<string> {
       }
       throw error;
     }
-  });
+  };
+  const text = timeoutMs === undefined ? await run(new AbortController().signal) : await withTimeout(label, timeoutMs, run);
 
   if (!text) throw new Error(`${label}: empty model response`);
   return text;

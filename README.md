@@ -131,7 +131,6 @@ Camera capture needs HTTPS, so test from a phone on the deployed URL. Never comm
 | `GEMINI_MODEL` | `gemini-3.8-flash` | Level generation model |
 | `GEMINI_ROAST_MODEL` | `GEMINI_MODEL` | Roast model |
 | `GEMINI_LEVEL_THINKING` / `GEMINI_ROAST_THINKING` | `low` | `low`, `medium` or `high` (`minimal` is rejected by the API) |
-| `GEMINI_LEVEL_TIMEOUT_MS` / `GEMINI_LEVEL_REPAIR_TIMEOUT_MS` / `GEMINI_LEVEL_BUDGET_MS` | `120000` / `120000` / `300000` | Timeouts for the first level call, each repair call, and the whole scan. A vision call with JSON output took longer than the original 6s, which silently produced a fallback level |
 | `GEMINI_ROAST_TIMEOUT_MS` | `2500` | Server-side roast timeout. The client cutoff should be this + ~500ms |
 | `PORT` | `3001` | Injected by the platform |
 
