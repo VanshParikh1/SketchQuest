@@ -1,8 +1,8 @@
-import type { DeathEvent } from "./level";
+import type { DeathEvent, WinEvent } from "./level";
 
 export type GameEventMap = {
   death: DeathEvent;
-  win: void;
+  win: WinEvent;
 };
 
 type Listener<T> = (payload: T) => void;

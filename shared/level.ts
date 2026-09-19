@@ -36,6 +36,11 @@ export type DeathEvent = {
   timeAlive: number;
 };
 
+export type WinEvent = {
+  coins: number;
+  timeAlive: number;
+};
+
 export const sampleLevel: Level = {
   name: "Doodle Dash",
   intro: "A wobbly little world drawn in a hurry. Try not to fall in the scribbles.",
