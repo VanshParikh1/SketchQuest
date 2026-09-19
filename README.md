@@ -33,3 +33,7 @@ npm start                      # Express serves /api and client/dist
 | `server` | Express API (`/api/health`, stub `/api/level`, stub `/api/roast`) |
 | `shared` | Constants, Zod level schema + `sampleLevel`, typed `gameEvents` (imported as `@sketchquest/shared`) |
 | `samples` | Sample sketches |
+
+## Later enhancement: multi-photo levels
+
+Allow players to capture or upload several numbered sketch frames, reorder or remove them, and build a longer level by placing the frames side by side. Before implementation, align the frontend, backend, and game on the multi-image request format and how wider scrolling worlds are represented; the current level schema uses normalized `0-1000` coordinates and the game uses a fixed `1600x900` world.
