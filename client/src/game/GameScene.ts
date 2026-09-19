@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import {
   JUMP_VELOCITY,
+  LevelSchema,
   WORLD_H,
   WORLD_W,
   gameEvents,
@@ -17,6 +18,10 @@ import { playDeathEffect } from "./deathEffects";
 import { burstParticles } from "./particles";
 import { Hud } from "./Hud";
 import { WinOverlay } from "./WinOverlay";
+import { DebugOverlay } from "./DebugOverlay";
+import { DEBUG } from "./debug";
+import { debugTestLevels } from "./testLevels";
+import { sanitizeLevel } from "./sanitizeLevel";
 
 export const GAME_SCENE_KEY = "GameScene";
 
@@ -51,6 +56,7 @@ export class GameScene extends Phaser.Scene {
   private attemptState = new AttemptState();
   private hud!: Hud;
   private winOverlay?: WinOverlay;
+  private debugOverlay?: DebugOverlay;
   private dead = false;
   private won = false;
   private fallThreshold = WORLD_H + FALL_MARGIN;
@@ -133,6 +139,13 @@ export class GameScene extends Phaser.Scene {
     this.cursors = kb.createCursorKeys();
     this.keys = kb.addKeys("W,A,D") as typeof this.keys;
     this.restartKey = kb.addKey("R");
+
+    if (DEBUG) {
+      this.debugOverlay = new DebugOverlay(this);
+      kb.on("keydown-ONE", () => this.loadDebugLevel(1));
+      kb.on("keydown-TWO", () => this.loadDebugLevel(2));
+      kb.on("keydown-THREE", () => this.loadDebugLevel(3));
+    }
   }
 
   update() {
@@ -153,6 +166,17 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.hud.setCoins(this.attemptState.coins);
+    this.debugOverlay?.update(
+      this.attemptState.attempt,
+      this.attemptState.lastDeathsAtSpot,
+      this.attemptState.timeAlive(this)
+    );
+  }
+
+  /** Debug-only (?debug=1): keys 1/2/3 load a test level, clamped/filtered by sanitizeLevel. */
+  private loadDebugLevel(n: 1 | 2 | 3) {
+    const level = LevelSchema.parse(sanitizeLevel(debugTestLevels[n]));
+    this.scene.restart({ level });
   }
 
   private handleEnemyOverlap(enemy: Enemy) {
