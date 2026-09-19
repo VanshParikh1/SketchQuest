@@ -1,11 +1,11 @@
 # Sketchquest: Status
 
-Snapshot of what is implemented so far. This is a scaffold: the plumbing works. There is no Gemini logic yet, but the core gameplay loop (death, respawn, coins, win, patrolling enemies) is in.
+Snapshot of what is implemented so far. The gameplay loop (death, respawn, coins, win, patrolling enemies) is in, and the server has the real `/api/level` and `/api/roast` pipelines. Both are written but have not been run against real Gemini yet (no key or sample photos so far); without a key they serve fallback levels and canned roasts.
 
 ## Quick start
 
 ```bash
-cp .env.example .env    # GEMINI_API_KEY is not used yet
+cp .env.example .env    # add GEMINI_API_KEY (optional: GEMINI_MODEL, GEMINI_ROAST_MODEL)
 npm install
 npm run dev             # client :5173 + server :3001
 ```
@@ -37,7 +37,7 @@ client/             Vite + React + TypeScript + Phaser 3 (arcade physics)
   src/main.tsx
   src/ui/App.tsx
   src/game/{index,mountGame,GameScene}.ts
-server/index.ts     Express + Zod + dotenv (+ @google/genai installed, unused)
+server/             Express + Zod + dotenv + @google/genai (see Server)
 shared/             imported as "@sketchquest/shared" (TS source, no build step)
 samples/            empty (.gitkeep), for sample sketches
 ```
@@ -53,7 +53,9 @@ samples/            empty (.gitkeep), for sample sketches
   - `DeathEvent = { cause, x, y, attempt, deathsAtSpot, coins, timeAlive }`.
   - `WinEvent = { coins, timeAlive }` (added — see below).
 - **`events.ts`**: `gameEvents`, a tiny typed emitter with `"death"` (`DeathEvent`) and `"win"` (`WinEvent`, changed from no payload — see below). `on()` returns an unsubscribe function. The UI/narrator subscribes here and never touches Phaser internals.
-- **`api.ts`**: response types `HealthResponse`, `LevelResponse` (`{ level }`), `RoastResponse` (`{ roast }`).
+- **`api.ts`**: `HealthResponse`; `LevelRequestSchema`/`LevelRequest` (`{ image }`, base64 JPEG, a `data:` prefix is tolerated); `LevelResponse` (`{ level, meta: { repairs, fallback } }`); `RoastRequestSchema`/`RoastRequest` (`{ levelName, cause, attempt, deathsAtSpot, coins, timeAlive, recentRoasts? }`); `RoastResponse` (`{ line }`, was `{ roast }`).
+- **`sanitizeLevel.ts`**: moved here from `client/src/game` so the server runs the same code on Gemini output. Clamps/drops bad entities, fixes invalid hazard types, and renames duplicate ids (`p1` -> `p1-2`) instead of dropping the entity.
+- **`validate.ts`**: `validateLevel(level) -> { reachable, report }`. BFS over platform tops using the constants at 90% (`SAFETY`) of the physical limit (`MAX_JUMP_HEIGHT` ~118px, `MAX_FLAT_GAP` ~202px). Report lines are plain English (`gap of 512px between p1 and p2 exceeds max flat gap 202px`) and the report is empty when reachable. Platforms with no hazard-free stretch as wide as the player are unusable. Enemies and coins are ignored. `DeathCauseSchema` (Zod) was added to `level.ts`; `DeathCause` is inferred from it.
 
 Level coordinate conventions (as the game currently interprets them):
 
@@ -65,18 +67,25 @@ Level coordinate conventions (as the game currently interprets them):
 
 ## Server
 
-`server/index.ts`:
-
 | Route | Status |
 | --- | --- |
 | `GET /api/health` | Returns `{ ok: true }` |
-| `POST /api/level` | Stub. Ignores the body and returns `{ level: sampleLevel }` |
-| `POST /api/roast` | Stub. Ignores the body and returns `{ roast: "You died to a doodle. A DOODLE." }` |
+| `POST /api/level` | Real. Body `{ image }` -> `{ level, meta }`. 400 for a missing, oversized (> 12M base64 chars), non-base64 or non-JPEG/PNG/WebP image. Never 500s for Gemini failures: any error, timeout or unbeatable result returns a hand-made level with `meta.fallback: true` |
+| `POST /api/roast` | Real. Body `RoastRequest` -> `{ line }`. 400 only for a malformed body. Model timeout is 1200ms; on timeout/error/junk output it returns a canned line for the cause, still with status 200 |
 
-- JSON body limit is 20 MB, so base64 sketch images will fit.
-- `.env` is loaded from the repo root.
-- `@google/genai` is installed but not imported anywhere.
-- In production the server runs through `tsx` (no compile step), because `shared` is TypeScript source.
+Files in `server/`:
+
+- `env.ts`: loads the repo-root `.env` (side-effect import, first in `index.ts` and the scripts).
+- `gemini.ts`: `@google/genai` Interactions API wrapper (`generate()`, `withTimeout()`, `GEMINI_MODEL` default `gemini-3.8-flash`). The SDK's `generation_config` type has no `temperature`, so it is sent via `extra_body`; a 400 makes it retry once without it and stop sending it.
+- `prompts.ts`, `levelFromSketch.ts`: one structured-output call (photo + system prompt, schema from `z.toJSONSchema(LevelSchema)`), then sanitize -> `validateLevel`. If unreachable it sends the photo, the level JSON and the validator report back for minimal edits (max 2 rounds). Per-call timeouts are ~6s first / ~4s repair and repairs are skipped once the ~8s budget is spent. Stage timings are logged.
+- `fallbackLevels.ts`: three hand-made levels (all checked by `test-validate.ts`), picked by image hash.
+- Cache: in-memory, sha256 of the image, max 200 entries, plus in-flight dedupe of identical concurrent scans. Fallbacks are not cached, so a retry gets another shot at Gemini.
+- `roast.ts`: prompt (PG-13, one sentence, 20 word cap, escalates with `deathsAtSpot`, never repeats `recentRoasts`), output cleanup (first sentence, quotes stripped, truncated to 20 words) and the per-cause fallback pool. The client sends `recentRoasts` (last 3); the server keeps no roast state.
+- `sketchImage.ts`: image body parsing (raw base64 or data URL).
+- `index.ts`: JSON body limit 20 MB, one-line request log for `/api`, JSON 404 for unknown `/api` routes, and a global JSON error handler.
+- `.env` is loaded from the repo root. In production the server runs through `tsx` (no compile step), because `shared` is TypeScript source.
+
+Scripts (from the repo root, `-w server`): `test:validate` (validator, sanitizer, fallback levels), `test:pipeline` (repair loop, fallback and cache with a scripted fake model, no network), `test:roast` (offline format checks, then 5 death contexts against the model when a key is set), `run-samples` (runs every image in `samples/` through the full pipeline and prints level name, entity counts, reachable, repairs, fallback, ms).
 
 ## Client game (`client/src/game`)
 
@@ -85,7 +94,7 @@ Level coordinate conventions (as the game currently interprets them):
 - **`prepareLevel.ts`**: the one entry point for untrusted levels: `sanitizeLevel` -> `fixLevel` -> `LevelSchema.parse`. `loadLevel` and the debug hotkeys both go through it.
 - **`fixLevel.ts`**: spawn safety, runs after `sanitizeLevel`. Works in normalized coords using the shared `PLAYER_W`/`PLAYER_H` (converted via `units.ts`) and `COIN_SIZE` (the coin sprite edge, 20px). (1) If a level has no platforms, adds an `auto-ground` platform spanning the bottom. (2) If the player's box at `start` overlaps a platform or hazard, or no platform is beneath it, `start` snaps to the top-center of the nearest platform (`y = platform.y - half player height`), preferring a platform where the player wouldn't stand inside another platform/hazard. (3) A goal or coin fully inside a platform is nudged to just above that platform's top edge (repeated a few times for stacked platforms). Goals/coins only partly overlapping a platform are left alone.
 - **`units.ts`**: `sx`/`sy` (normalized -> world px), `nx`/`ny` (the inverse) and `COIN_SIZE`, shared by `GameScene` and `fixLevel`.
-- **`sanitizeLevel.ts`**: coerces arbitrary/malformed level data into something `LevelSchema` accepts instead of letting it throw — numeric fields are clamped into `[0, 1000]`, `w`/`h` fall back to `1` instead of `0`, invalid hazard `type`s fall back to `"spike"`, and any platform/hazard/coin/enemy missing a string `id` is dropped rather than crashing the whole level. Missing `start`/`goal` fall back to `sampleLevel`'s.
+- **`sanitizeLevel`** (now `shared/sanitizeLevel.ts`, imported from `@sketchquest/shared`): coerces arbitrary/malformed level data into something `LevelSchema` accepts instead of letting it throw — numeric fields are clamped into `[0, 1000]`, `w`/`h` fall back to `1` instead of `0`, invalid hazard `type`s fall back to `"spike"`, and any platform/hazard/coin/enemy missing a string `id` is dropped rather than crashing the whole level. Missing `start`/`goal` fall back to `sampleLevel`'s.
 - **`debug.ts`**: exports `DEBUG`, true iff the page URL has `?debug=1`.
 - **`testLevels.ts`**: three levels for the debug hotkeys — `easyLevel` (1), `spikeGauntletLevel` (2), and `messyLevel` (3, typed `unknown` on purpose: overlapping/duplicate platforms, out-of-range and negative coordinates, an invalid hazard type, entities missing `id`/`patrol`, and zero coins), exported together as `debugTestLevels`.
 - **`GameScene`** loads `sampleLevel` by default and orchestrates everything below; game logic itself lives in the smaller files it composes:
@@ -115,6 +124,7 @@ Level coordinate conventions (as the game currently interprets them):
 
 ## Verified
 
+- Server pass: `npm run typecheck`, `npm run build`, `test:validate` (16 checks), `test:pipeline` (10 checks, fake model) and the offline part of `test:roast` pass. No dev server, browser or Gemini call was made.
 - `npm run typecheck` and `npm run build` pass.
 - Dev (prior scaffold pass): the game renders, the player runs and jumps and lands on platforms, and `loadLevel(customLevel)` rebuilds the scene with no refresh and a single canvas.
 - The `/api` proxy from Vite to Express works.
@@ -123,7 +133,10 @@ Level coordinate conventions (as the game currently interprets them):
 
 ## Not done yet
 
-- Real `/api/level` (sketch to Gemini to `Level`, validated with `LevelSchema`) and `/api/roast`.
+- Running `/api/level` and `/api/roast` against real Gemini: nothing has hit the API yet. The model name, `response_format` shape and the `extra_body` temperature/thinking settings follow the SDK types and docs but are unconfirmed.
+- Tuning the level prompt on real photos (`samples/` is empty), and the ~8s / 1.5s latency targets.
+- Deploying to Railway and testing from a phone.
+- Client integration of `/api/roast` and `meta.fallback` (`App.tsx` already parses `meta`).
 - Sketch upload and other UI screens.
 - Sample sketches in `samples/`.
 - Tests (`fixLevel` is a pure function and a good first unit-test target).
