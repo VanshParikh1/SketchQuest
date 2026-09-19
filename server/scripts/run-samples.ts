@@ -3,7 +3,7 @@ import path from "node:path";
 import "../env";
 import { validateLevel } from "@sketchquest/shared";
 import { levelFromSketch } from "../levelFromSketch";
-import { hasGeminiKey } from "../gemini";
+import { liveAvailable } from "../gemini";
 
 const SAMPLES_DIR = path.resolve(import.meta.dirname, "../../samples");
 const MIME: Record<string, string> = {
@@ -21,9 +21,10 @@ if (files.length === 0) {
   console.log(`No images in ${SAMPLES_DIR}. Add .jpg/.png/.webp sketches and rerun.`);
   process.exit(0);
 }
-if (!hasGeminiKey()) {
-  console.warn("GEMINI_API_KEY is not set: every sample will use a fallback level.\n");
+if (!liveAvailable()) {
+  console.warn("GEMINI_API_KEY is not set (and GEMINI_REPLAY is off): every sample will use a fallback level.\n");
 }
+if (process.env.GEMINI_MOCK) console.warn("GEMINI_MOCK only affects the HTTP endpoints; run-samples always runs the real pipeline.\n");
 
 type Row = Record<string, string | number | boolean>;
 const rows: Row[] = [];

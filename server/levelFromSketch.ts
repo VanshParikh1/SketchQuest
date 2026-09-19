@@ -8,7 +8,7 @@ import {
   type LevelResponse,
 } from "@sketchquest/shared";
 import { pickFallback } from "./fallbackLevels";
-import { generate, type GenerateOptions, hasGeminiKey, thinkingFromEnv } from "./gemini";
+import { generate, type GenerateOptions, liveAvailable, thinkingFromEnv } from "./gemini";
 import { buildRepairPrompt, LEVEL_SYSTEM_PROMPT, LEVEL_USER_PROMPT } from "./prompts";
 
 /** Soft end-to-end target: repairs are skipped once this is spent. */
@@ -87,7 +87,7 @@ async function buildLevel(image: SketchImage, hash: string, gen: Generate): Prom
     return { level: pickFallback(hash), meta: { repairs: 0, fallback: true } };
   };
 
-  if (gen === generate && !hasGeminiKey()) return fallback("GEMINI_API_KEY not set");
+  if (gen === generate && !liveAvailable()) return fallback("GEMINI_API_KEY not set");
 
   const imagePart = { type: "image", data: image.data, mime_type: image.mimeType } as const;
 

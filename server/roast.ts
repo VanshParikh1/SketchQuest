@@ -1,5 +1,5 @@
 import { type DeathCause, type RoastRequest } from "@sketchquest/shared";
-import { generate, hasGeminiKey, thinkingFromEnv, type GenerateOptions } from "./gemini";
+import { generate, liveAvailable, thinkingFromEnv, type GenerateOptions } from "./gemini";
 
 /** Model for roasts. Override with GEMINI_ROAST_MODEL; defaults to the level model. */
 const roastModel = () => process.env.GEMINI_ROAST_MODEL || undefined;
@@ -126,7 +126,7 @@ export async function roastLine(req: RoastRequest, gen: RoastGenerate = generate
     return { line: fallbackRoast(req.cause, req.recentRoasts), source: "fallback", ms: Date.now() - started, raw, reason };
   };
 
-  if (gen === generate && !hasGeminiKey()) return fallback("GEMINI_API_KEY not set");
+  if (gen === generate && !liveAvailable()) return fallback("GEMINI_API_KEY not set");
 
   try {
     const text = await gen({

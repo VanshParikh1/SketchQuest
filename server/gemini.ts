@@ -1,6 +1,8 @@
 import "./env";
 import { GoogleGenAI } from "@google/genai";
 import { reserveCall } from "./budget";
+import { isRecord, isReplay } from "./config";
+import { replayFixture, saveFixture } from "./fixtures";
 
 /** Model for level generation. Override with GEMINI_MODEL. */
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
@@ -9,6 +11,11 @@ let client: GoogleGenAI | null = null;
 
 export function hasGeminiKey(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
+}
+
+/** True when generate() can produce output: a real key, or recorded fixtures to replay. */
+export function liveAvailable(): boolean {
+  return isReplay() || hasGeminiKey();
 }
 
 function getClient(): GoogleGenAI {
@@ -88,8 +95,20 @@ export type GenerateOptions = {
  */
 let temperatureSupported = true;
 
-/** One Interactions API call; returns the model's text output. */
+/**
+ * One model call; returns the text output. GEMINI_REPLAY=1 serves recorded
+ * fixtures (and throws FixtureMissError on a miss) without any API call;
+ * otherwise it is a real, budget-counted request, saved to fixtures when
+ * GEMINI_RECORD=1.
+ */
 export async function generate(options: GenerateOptions): Promise<string> {
+  if (isReplay()) return replayFixture(options);
+  const text = await generateLive(options);
+  if (isRecord()) saveFixture(options, text, options.model ?? GEMINI_MODEL);
+  return text;
+}
+
+async function generateLive(options: GenerateOptions): Promise<string> {
   const { label, system, input, timeoutMs, schema, thinkingLevel, maxOutputTokens, noRetries } = options;
   const temperature = temperatureSupported ? options.temperature : undefined;
   const ai = getClient();
