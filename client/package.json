@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "narrator:samples": "tsx scripts/sample-lines.ts"
   },
   "dependencies": {
     "phaser": "^3.90.0",
