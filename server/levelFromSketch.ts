@@ -8,6 +8,7 @@ import {
   type LevelResponse,
 } from "@sketchquest/shared";
 import { pickFallback } from "./fallbackLevels";
+import { readDiskLevel, writeDiskLevel } from "./levelCache";
 import { generate, type GenerateOptions, liveAvailable, thinkingFromEnv } from "./gemini";
 import { buildRepairPrompt, LEVEL_SYSTEM_PROMPT, LEVEL_USER_PROMPT } from "./prompts";
 
@@ -38,6 +39,16 @@ export type LevelFromSketchOptions = {
 const cache = new Map<string, LevelResponse>();
 const inFlight = new Map<string, Promise<LevelResponse>>();
 
+function remember(hash: string, response: LevelResponse): void {
+  if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+  cache.set(hash, response);
+}
+
+/** Drops the in-memory cache only (tests use this to simulate a restart; the disk cache stays). */
+export function clearMemoryCache(): void {
+  cache.clear();
+}
+
 export function imageHash(image: SketchImage): string {
   return createHash("sha256").update(image.data).digest("hex");
 }
@@ -60,14 +71,23 @@ export async function levelFromSketch(
     if (pending) return structuredClone(await pending);
   }
 
-  const run = buildLevel(image, hash, options.generate ?? generate).then((response) => {
+  const run = (async () => {
+    if (useCache) {
+      const stored = await readDiskLevel(hash);
+      if (stored) {
+        console.log(`[level] ${hash.slice(0, 8)} disk cache hit`);
+        remember(hash, stored);
+        return stored;
+      }
+    }
+    const response = await buildLevel(image, hash, options.generate ?? generate);
     // Fallbacks aren't cached: a retry of the same photo should get another shot at Gemini.
     if (useCache && !response.meta.fallback) {
-      if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value!);
-      cache.set(hash, response);
+      remember(hash, response);
+      await writeDiskLevel(hash, response);
     }
     return response;
-  });
+  })();
 
   if (!useCache) return run;
   inFlight.set(hash, run);
