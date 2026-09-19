@@ -1,0 +1,9 @@
+{
+  "kind": "level",
+  "label": "level",
+  "model": "gemini-3.8-flash",
+  "promptHash": "abcad129",
+  "inputHash": "bef5fd86d8c8",
+  "recordedAt": "2026-09-19T18:22:20.490Z",
+  "text": "{\n  \"name\": \"The Floor is Warm\",\n  \"intro\": \"Sprint and hop across scorching hot spots along the runway to safety!\",\n  \"quips\": [\n    \"Stepped right into the danger zone, didn't you?\",\n    \"Gravity is free, but that burn is going to cost you.\",\n    \"A running jump requires actual jumping.\",\n    \"Hot feet, cold defeat.\",\n    \"The red stuff isn't marinara sauce.\",\n    \"Try hopping over the hazards next time!\"\n  ],\n  \"start\": {\n    \"x\": 108,\n    \"y\": 702\n  },\n  \"goal\": {\n    \"id\": \"goal\",\n    \"x\": 814,\n    \"y\": 665,\n    \"w\": 44,\n    \"h\": 66\n  },\n  \"platforms\": [\n    {\n      \"id\": \"p1\",\n      \"x\": 58,\n      \"y\": 732,\n      \"w\": 848,\n      \"h\": 16\n    }\n  ],\n  \"hazards\": [\n    {\n      \"id\": \"h1\",\n      \"x\": 198,\n      \"y\": 716,\n      \"w\": 54,\n      \"h\": 16,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h2\",\n      \"x\": 365,\n      \"y\": 718,\n      \"w\": 92,\n      \"h\": 14,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h3\",\n      \"x\": 554,\n      \"y\": 721,\n      \"w\": 62,\n      \"h\": 15,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h4\",\n      \"x\": 686,\n      \"y\": 718,\n      \"w\": 68,\n      \"h\": 15,\n      \"type\": \"lava\"\n    }\n  ],\n  \"coins\": [\n    {\n      \"id\": \"c1\",\n      \"x\": 309,\n      \"y\": 700\n    },\n    {\n      \"id\": \"c2\",\n      \"x\": 505,\n      \"y\": 700\n    },\n    {\n      \"id\": \"c3\",\n      \"x\": 653,\n      \"y\": 702\n    }\n  ],\n  \"enemies\": []\n}"
+}

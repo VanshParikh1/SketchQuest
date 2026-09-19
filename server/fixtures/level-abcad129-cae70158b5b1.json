@@ -1,0 +1,9 @@
+{
+  "kind": "level",
+  "label": "level",
+  "model": "gemini-3.8-flash",
+  "promptHash": "abcad129",
+  "inputHash": "cae70158b5b1",
+  "recordedAt": "2026-09-19T18:17:45.417Z",
+  "text": "{\n  \"name\": \"Dot to Dot Dash\",\n  \"intro\": \"Hop your way up the ledges, evade the patrolling purple spheres, and avoid the searing red hot hazard!\",\n  \"quips\": [\n    \"Gravity: 1, You: 0.\",\n    \"Did you think the purple dots wanted hugs?\",\n    \"Hot floor, cold reaction.\",\n    \"A legendary leap... straight into thin air.\",\n    \"Maybe take the stairs next time?\",\n    \"Those dots are stationary only in your dreams!\"\n  ],\n  \"start\": {\n    \"x\": 154,\n    \"y\": 673\n  },\n  \"goal\": {\n    \"id\": \"goal\",\n    \"x\": 750,\n    \"y\": 476,\n    \"w\": 36,\n    \"h\": 36\n  },\n  \"platforms\": [\n    {\n      \"id\": \"p1\",\n      \"x\": 135,\n      \"y\": 693,\n      \"w\": 180,\n      \"h\": 16\n    },\n    {\n      \"id\": \"p2\",\n      \"x\": 125,\n      \"y\": 585,\n      \"w\": 277,\n      \"h\": 18\n    },\n    {\n      \"id\": \"p3\",\n      \"x\": 412,\n      \"y\": 640,\n      \"w\": 108,\n      \"h\": 16\n    },\n    {\n      \"id\": \"p4\",\n      \"x\": 453,\n      \"y\": 518,\n      \"w\": 333,\n      \"h\": 16\n    }\n  ],\n  \"hazards\": [\n    {\n      \"id\": \"h1\",\n      \"x\": 315,\n      \"y\": 691,\n      \"w\": 96,\n      \"h\": 14,\n      \"type\": \"lava\"\n    }\n  ],\n  \"coins\": [\n    {\n      \"id\": \"c1\",\n      \"x\": 268,\n      \"y\": 668\n    },\n    {\n      \"id\": \"c2\",\n      \"x\": 350,\n      \"y\": 551\n    },\n    {\n      \"id\": \"c3\",\n      \"x\": 461,\n      \"y\": 619\n    }\n  ],\n  \"enemies\": [\n    {\n      \"id\": \"e1\",\n      \"x\": 205,\n      \"y\": 569,\n      \"patrol\": 120\n    },\n    {\n      \"id\": \"e2\",\n      \"x\": 492,\n      \"y\": 504,\n      \"patrol\": 160\n    }\n  ]\n}"
+}
