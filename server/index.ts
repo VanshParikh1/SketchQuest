@@ -1,19 +1,32 @@
 import "./env";
 import path from "node:path";
-import express from "express";
+import express, { type ErrorRequestHandler } from "express";
 import {
   LevelRequestSchema,
+  RoastRequestSchema,
   type HealthResponse,
   type LevelResponse,
   type RoastResponse,
 } from "@sketchquest/shared";
 import { levelFromSketch } from "./levelFromSketch";
+import { roastLine } from "./roast";
 import { parseSketchImage } from "./sketchImage";
 
 const PORT = Number(process.env.PORT ?? 3001);
 const CLIENT_DIST = path.resolve(import.meta.dirname, "../client/dist");
 
 const app = express();
+
+// Request log: one line per /api call (method, path, status, ms). Bodies are never logged.
+app.use((req, res, next) => {
+  if (!req.path.startsWith("/api")) return next();
+  const started = Date.now();
+  res.on("finish", () => {
+    console.log(`[http] ${req.method} ${req.path} ${res.statusCode} ${Date.now() - started}ms`);
+  });
+  next();
+});
+
 app.use(express.json({ limit: "20mb" }));
 
 app.get("/api/health", (_req, res) => {
@@ -36,9 +49,21 @@ app.post("/api/level", async (req, res) => {
   res.json((await levelFromSketch(parsed.image)) satisfies LevelResponse);
 });
 
-// Stub: will take death/win events and return a Gemini-generated roast.
-app.post("/api/roast", (_req, res) => {
-  res.json({ line: "You died to a doodle. A DOODLE." } satisfies RoastResponse);
+// Death context -> one roast line. Always 200 for a valid body: a slow or failing
+// model yields a generic line for the cause instead of an error.
+app.post("/api/roast", async (req, res) => {
+  const body = RoastRequestSchema.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: "Body must be a RoastRequest" });
+    return;
+  }
+  const { line } = await roastLine(body.data);
+  res.json({ line } satisfies RoastResponse);
+});
+
+// Unknown /api routes get JSON, not the SPA fallback or an HTML 404.
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "Not found" });
 });
 
 // Production: one service serves the built client.
@@ -49,6 +74,18 @@ if (process.env.NODE_ENV === "production") {
     res.sendFile(path.join(CLIENT_DIST, "index.html"));
   });
 }
+
+// Global error handler: always JSON (body-parse failures, oversized bodies, bugs).
+const onError: ErrorRequestHandler = (err, req, res, _next) => {
+  const status =
+    typeof err?.status === "number" && err.status >= 400 && err.status < 600 ? err.status : 500;
+  if (status >= 500) console.error(`[error] ${req.method} ${req.path}`, err);
+  if (res.headersSent) return;
+  res.status(status).json({
+    error: status >= 500 ? "Internal server error" : err.type === "entity.too.large" ? "Request body too large" : "Bad request",
+  });
+};
+app.use(onError);
 
 app.listen(PORT, () => {
   console.log(`[server] listening on http://localhost:${PORT}`);
