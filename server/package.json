@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch index.ts",
     "start": "NODE_ENV=production tsx index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:validate": "tsx scripts/test-validate.ts"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",
