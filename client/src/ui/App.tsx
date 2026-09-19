@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { LevelSchema, type Level, type LevelResponse } from "@sketchquest/shared";
+import { LevelSchema, sampleLevel, type Level, type LevelResponse } from "@sketchquest/shared";
 import { mountGame } from "../game";
+import { ScanLoader } from "./ScanLoader";
 import "./App.css";
 
 const MAX_IMAGE_EDGE = 1600;
@@ -195,6 +196,7 @@ export function App() {
   const [preparing, setPreparing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [level, setLevel] = useState<Level | null>(null);
   const [playing, setPlaying] = useState(false);
 
@@ -296,7 +298,7 @@ export function App() {
     if (!image || submitting) return;
 
     setSubmitting(true);
-    setError(null);
+    setScanError(null);
     try {
       const response = await fetch("/api/level", {
         method: "POST",
@@ -319,7 +321,7 @@ export function App() {
       setLevel(result.level);
       setPlaying(false);
     } catch (caught) {
-      setError(
+      setScanError(
         caught instanceof Error
           ? caught.message
           : "Sketchquest could not build this level. Please try another photo.",
@@ -334,6 +336,13 @@ export function App() {
     setLevel(null);
     setImage(null);
     setError(null);
+    setScanError(null);
+  };
+
+  const playSample = () => {
+    setScanError(null);
+    setLevel(sampleLevel);
+    setPlaying(true);
   };
 
   if (level && playing) {
@@ -409,6 +418,18 @@ export function App() {
           </aside>
         </section>
       </main>
+    );
+  }
+
+  if (image && (submitting || scanError)) {
+    return (
+      <ScanLoader
+        imageUrl={image.dataUrl}
+        error={scanError}
+        onRetry={() => void createLevel()}
+        onPlaySample={playSample}
+        onChoosePhoto={() => setScanError(null)}
+      />
     );
   }
 
