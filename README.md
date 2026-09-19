@@ -42,6 +42,7 @@ Environment variables:
 | `NODE_ENV` | yes | Set to `production` so Express serves the built client (`npm start` already sets it) |
 | `GEMINI_MODEL` | no | Level generation model, default `gemini-3.8-flash` |
 | `GEMINI_ROAST_MODEL` | no | Roast model, default is `GEMINI_MODEL` |
+| `GEMINI_ROAST_TIMEOUT_MS` | no | Server-side roast timeout, default `2500` (client cutoff = this + ~500ms) |
 | `GEMINI_ROAST_THINKING` / `GEMINI_LEVEL_THINKING` | no | `low` (default), `medium` or `high` |
 | `PORT` | no | Injected by the platform; default 3001 |
 

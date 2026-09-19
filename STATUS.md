@@ -71,7 +71,7 @@ Level coordinate conventions (as the game currently interprets them):
 | --- | --- |
 | `GET /api/health` | Returns `{ ok: true }` |
 | `POST /api/level` | Real. Body `{ image }` -> `{ level, meta }`. 400 for a missing, oversized (> 12M base64 chars), non-base64 or non-JPEG/PNG/WebP image. Never 500s for Gemini failures: any error, timeout or unbeatable result returns a hand-made level with `meta.fallback: true` |
-| `POST /api/roast` | Real. Body `RoastRequest` -> `{ line }`. 400 only for a malformed body. Model timeout is 1200ms; on timeout/error/junk output it returns a canned line for the cause, still with status 200 |
+| `POST /api/roast` | Real. Body `RoastRequest` -> `{ line }`. 400 only for a malformed body. Model timeout is `GEMINI_ROAST_TIMEOUT_MS` (default 2500ms) with SDK retries off; on timeout/429/error/junk output it returns a canned line for the cause, still with status 200 |
 
 Files in `server/`:
 
@@ -191,6 +191,14 @@ Try these with `?debug=1`, using `messyLevel` (`3`) and the levels' hotkeys:
 4. Check: hold right and tap jump at the same time; tap-and-release jump for a short hop; slide a thumb from left to right; the page must not scroll, zoom or open a long-press menu over the canvas; rotate to portrait and confirm the level is fully visible (letterboxed) with the "Rotate your phone" pill; win and tap anywhere to replay.
 
 Touch-only caveats: audio unlocks on the first tap; there is no touch mute or restart button (`R`/`M` are keyboard-only; dying respawns and the win overlay is tap-to-replay). Page-level scroll/zoom outside the canvas is controlled by the UI's CSS/viewport meta, not the game.
+
+## Latency and rate limits
+
+- **Paid tier required.** The free tier for gemini-3.8-flash allows 5 requests/minute and only 20 requests/day (the daily cap was hit during testing, after which every call returned 429). A level scan (1 call + up to 2 repairs) plus a roast per death exceeds that within seconds, and every 429 becomes a fallback level or canned roast.
+- **Timeouts and models (env):** `GEMINI_ROAST_TIMEOUT_MS` (default 2500; roast calls also run with SDK retries off so a 429 or slow call falls straight to the canned line), `GEMINI_MODEL`, `GEMINI_ROAST_MODEL`, `GEMINI_ROAST_THINKING`, `GEMINI_LEVEL_THINKING`. Level generation keeps the SDK's default retries, but each call's timeout is capped by what is left of the ~8s level budget, so retries cannot push a scan past it.
+- **Client cutoff (dev 3's roast fetch) should be `GEMINI_ROAST_TIMEOUT_MS` + ~500ms** (3000ms at the default) so the server's canned line still arrives instead of the client giving up first. It was 1500ms when the server timeout was 1200ms.
+- Last measurement (free tier, before the daily cap): roast calls at `low` thinking took ~1.6-3.4s typical with occasional 11-12s spikes, so expect some canned lines even at 2500ms. With retries off, a 429 falls back in ~150-500ms. Real numbers on the paid tier are still to be measured.
+- `npm run test:roast -w server` runs each death context 3 times and prints min/median/max latency and the MODEL vs FALLBACK count.
 
 ## Known quirks
 
