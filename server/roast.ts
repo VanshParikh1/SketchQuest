@@ -4,8 +4,16 @@ import { generate, hasGeminiKey, thinkingFromEnv, type GenerateOptions } from ".
 /** Model for roasts. Override with GEMINI_ROAST_MODEL; defaults to the level model. */
 const roastModel = () => process.env.GEMINI_ROAST_MODEL || undefined;
 
-/** The client gives up at 1500ms; leave room for the network hop back. */
-export const ROAST_TIMEOUT_MS = 1200;
+const DEFAULT_ROAST_TIMEOUT_MS = 2500;
+
+/**
+ * Server-side cap on the roast call (GEMINI_ROAST_TIMEOUT_MS, default 2500).
+ * The client's cutoff should be this plus ~500ms so the canned line still arrives in time.
+ */
+export function roastTimeoutMs(): number {
+  const raw = Number(process.env.GEMINI_ROAST_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw >= 100 ? raw : DEFAULT_ROAST_TIMEOUT_MS;
+}
 const MAX_WORDS = 20;
 const MAX_RECENT = 3;
 /** Untrusted strings from the client are capped before they reach the prompt. */
@@ -109,7 +117,7 @@ export type Roast = {
 };
 export type RoastGenerate = (options: GenerateOptions) => Promise<string>;
 
-/** Never throws and never takes much longer than ROAST_TIMEOUT_MS. */
+/** Never throws and never takes much longer than roastTimeoutMs(). */
 export async function roastLine(req: RoastRequest, gen: RoastGenerate = generate): Promise<Roast> {
   const started = Date.now();
   let raw: string | undefined;
@@ -126,7 +134,8 @@ export async function roastLine(req: RoastRequest, gen: RoastGenerate = generate
       model: roastModel(),
       system: ROAST_SYSTEM_PROMPT,
       input: buildRoastPrompt(req),
-      timeoutMs: ROAST_TIMEOUT_MS,
+      timeoutMs: roastTimeoutMs(),
+      noRetries: true,
       temperature: 1,
       thinkingLevel: thinkingFromEnv("GEMINI_ROAST_THINKING"),
       // Thinking tokens count against this cap; too small and the model returns no text at all.

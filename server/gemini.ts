@@ -74,6 +74,8 @@ export type GenerateOptions = {
   temperature?: number;
   thinkingLevel?: ThinkingLevel;
   maxOutputTokens?: number;
+  /** Fail fast: no SDK retries (429s and 5xx surface immediately). Level calls keep the default retries. */
+  noRetries?: boolean;
 };
 
 /**
@@ -87,7 +89,7 @@ let temperatureSupported = true;
 
 /** One Interactions API call; returns the model's text output. */
 export async function generate(options: GenerateOptions): Promise<string> {
-  const { label, system, input, timeoutMs, schema, thinkingLevel, maxOutputTokens } = options;
+  const { label, system, input, timeoutMs, schema, thinkingLevel, maxOutputTokens, noRetries } = options;
   const temperature = temperatureSupported ? options.temperature : undefined;
   const ai = getClient();
 
@@ -102,6 +104,7 @@ export async function generate(options: GenerateOptions): Promise<string> {
       },
       {
         timeout_ms: timeoutMs,
+        ...(noRetries && { retries: { strategy: "none" as const } }),
         fetch_options: { signal },
         // extra_body replaces generation_config wholesale, so it carries every field.
         extra_body: {
