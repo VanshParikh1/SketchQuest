@@ -1,0 +1,9 @@
+{
+  "kind": "level",
+  "label": "level",
+  "model": "gemini-3.8-flash",
+  "promptHash": "abcad129",
+  "inputHash": "bbef9e332da6",
+  "recordedAt": "2026-09-19T19:42:17.106Z",
+  "text": "{\n  \"name\": \"Slippery Slope\",\n  \"intro\": \"Dodge the fiery red hazards as you slide down towards the finish!\",\n  \"quips\": [\n    \"Hot feet make for quick defeats!\",\n    \"That slope was a bit too slippery, wasn't it?\",\n    \"Watch your step, it's getting red hot down here.\",\n    \"Gravity is doing all the work, but not for you!\",\n    \"Jump earlier next time, not deeper into the lava!\",\n    \"So close to the green, yet so burnt to a crisp.\"\n  ],\n  \"start\": {\n    \"x\": 120,\n    \"y\": 530\n  },\n  \"goal\": {\n    \"id\": \"goal\",\n    \"x\": 680,\n    \"y\": 630,\n    \"w\": 35,\n    \"h\": 120\n  },\n  \"platforms\": [\n    {\n      \"id\": \"p1\",\n      \"x\": 75,\n      \"y\": 560,\n      \"w\": 660,\n      \"h\": 220\n    }\n  ],\n  \"hazards\": [\n    {\n      \"id\": \"h1\",\n      \"x\": 185,\n      \"y\": 575,\n      \"w\": 45,\n      \"h\": 25,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h2\",\n      \"x\": 315,\n      \"y\": 625,\n      \"w\": 75,\n      \"h\": 30,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h3\",\n      \"x\": 460,\n      \"y\": 675,\n      \"w\": 50,\n      \"h\": 25,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h4\",\n      \"x\": 565,\n      \"y\": 705,\n      \"w\": 50,\n      \"h\": 25,\n      \"type\": \"lava\"\n    }\n  ],\n  \"coins\": [\n    {\n      \"id\": \"c1\",\n      \"x\": 275,\n      \"y\": 585\n    },\n    {\n      \"id\": \"c2\",\n      \"x\": 430,\n      \"y\": 630\n    },\n    {\n      \"id\": \"c3\",\n      \"x\": 545,\n      \"y\": 670\n    }\n  ],\n  \"enemies\": []\n}"
+}

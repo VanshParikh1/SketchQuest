@@ -1,0 +1,9 @@
+{
+  "kind": "level",
+  "label": "level",
+  "model": "gemini-3.8-flash",
+  "promptHash": "abcad129",
+  "inputHash": "e7d97186d08e",
+  "recordedAt": "2026-09-19T19:44:54.646Z",
+  "text": "{\n  \"name\": \"Hot Foot Hustle\",\n  \"intro\": \"Dash across the floor and mind the puddles of molten regret!\",\n  \"quips\": [\n    \"Floor is lava? More like floor is failure.\",\n    \"Did you forget that feet and magma don't mix?\",\n    \"That was a hot mess, literally.\",\n    \"One jump too short, one toast too crispy.\",\n    \"Lava 1, your reflexes 0.\",\n    \"At least you looked cool melting into slag.\"\n  ],\n  \"start\": {\n    \"x\": 88,\n    \"y\": 585\n  },\n  \"goal\": {\n    \"id\": \"goal\",\n    \"x\": 800,\n    \"y\": 480,\n    \"w\": 30,\n    \"h\": 145\n  },\n  \"platforms\": [\n    {\n      \"id\": \"p1\",\n      \"x\": 35,\n      \"y\": 630,\n      \"w\": 855,\n      \"h\": 20\n    }\n  ],\n  \"hazards\": [\n    {\n      \"id\": \"h1\",\n      \"x\": 180,\n      \"y\": 618,\n      \"w\": 55,\n      \"h\": 15,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h2\",\n      \"x\": 348,\n      \"y\": 618,\n      \"w\": 92,\n      \"h\": 15,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h3\",\n      \"x\": 535,\n      \"y\": 618,\n      \"w\": 62,\n      \"h\": 15,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h4\",\n      \"x\": 665,\n      \"y\": 612,\n      \"w\": 68,\n      \"h\": 20,\n      \"type\": \"lava\"\n    }\n  ],\n  \"coins\": [\n    {\n      \"id\": \"c1\",\n      \"x\": 292,\n      \"y\": 590\n    },\n    {\n      \"id\": \"c2\",\n      \"x\": 488,\n      \"y\": 585\n    },\n    {\n      \"id\": \"c3\",\n      \"x\": 635,\n      \"y\": 585\n    }\n  ],\n  \"enemies\": []\n}"
+}

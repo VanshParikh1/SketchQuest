@@ -1,0 +1,9 @@
+{
+  "kind": "level",
+  "label": "level",
+  "model": "gemini-3.8-flash",
+  "promptHash": "abcad129",
+  "inputHash": "5241bf928677",
+  "recordedAt": "2026-09-19T19:40:52.203Z",
+  "text": "{\n  \"name\": \"Hot Floor Hop\",\n  \"intro\": \"Watch your step across the elevated ledges because the ground floor is pure molten danger!\",\n  \"quips\": [\n    \"Hot floor, cold feet.\",\n    \"That lava wasn't a suggestion.\",\n    \"Gravity is working overtime today.\",\n    \"Jump higher, fall softer.\",\n    \"You just had to touch the red stuff, didn't you?\",\n    \"Step on up, the floor is definitely lava.\"\n  ],\n  \"start\": {\n    \"x\": 147,\n    \"y\": 585\n  },\n  \"goal\": {\n    \"id\": \"goal\",\n    \"x\": 757,\n    \"y\": 560,\n    \"w\": 18,\n    \"h\": 70\n  },\n  \"platforms\": [\n    {\n      \"id\": \"p_ground\",\n      \"x\": 125,\n      \"y\": 628,\n      \"w\": 698,\n      \"h\": 18\n    },\n    {\n      \"id\": \"p_left\",\n      \"x\": 207,\n      \"y\": 512,\n      \"w\": 111,\n      \"h\": 14\n    },\n    {\n      \"id\": \"p_top\",\n      \"x\": 354,\n      \"y\": 390,\n      \"w\": 126,\n      \"h\": 15\n    },\n    {\n      \"id\": \"p_right\",\n      \"x\": 451,\n      \"y\": 514,\n      \"w\": 223,\n      \"h\": 15\n    }\n  ],\n  \"hazards\": [\n    {\n      \"id\": \"h_ground_lava\",\n      \"x\": 205,\n      \"y\": 612,\n      \"w\": 458,\n      \"h\": 16,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h_top_spike\",\n      \"x\": 405,\n      \"y\": 358,\n      \"w\": 23,\n      \"h\": 32,\n      \"type\": \"spike\"\n    }\n  ],\n  \"coins\": [\n    {\n      \"id\": \"c1\",\n      \"x\": 248,\n      \"y\": 478\n    },\n    {\n      \"id\": \"c2\",\n      \"x\": 421,\n      \"y\": 298\n    },\n    {\n      \"id\": \"c3\",\n      \"x\": 607,\n      \"y\": 468\n    }\n  ],\n  \"enemies\": [\n    {\n      \"id\": \"e1\",\n      \"x\": 494,\n      \"y\": 484,\n      \"patrol\": 60\n    }\n  ]\n}"
+}

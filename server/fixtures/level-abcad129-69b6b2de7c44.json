@@ -1,0 +1,9 @@
+{
+  "kind": "level",
+  "label": "level",
+  "model": "gemini-3.8-flash",
+  "promptHash": "abcad129",
+  "inputHash": "69b6b2de7c44",
+  "recordedAt": "2026-09-19T19:43:43.767Z",
+  "text": "{\n  \"name\": \"Hot Foot Hustle\",\n  \"intro\": \"Dash across the floor and leap clear of the magma puddles to reach the exit.\",\n  \"quips\": [\n    \"Hot soles make poor traction.\",\n    \"That puddle looked friendlier than it felt.\",\n    \"Did you forget your heat-resistant boots?\",\n    \"Gravity called, you answered right into the lava.\",\n    \"Spicy floor claims another victim.\",\n    \"Try jumping over the red stuff next time.\"\n  ],\n  \"start\": {\n    \"x\": 138,\n    \"y\": 560\n  },\n  \"goal\": {\n    \"id\": \"goal\",\n    \"x\": 735,\n    \"y\": 530,\n    \"w\": 30,\n    \"h\": 125\n  },\n  \"platforms\": [\n    {\n      \"id\": \"p1\",\n      \"x\": 90,\n      \"y\": 615,\n      \"w\": 730,\n      \"h\": 30\n    }\n  ],\n  \"hazards\": [\n    {\n      \"id\": \"h1\",\n      \"x\": 208,\n      \"y\": 600,\n      \"w\": 50,\n      \"h\": 20,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h2\",\n      \"x\": 350,\n      \"y\": 613,\n      \"w\": 80,\n      \"h\": 22,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h3\",\n      \"x\": 510,\n      \"y\": 630,\n      \"w\": 55,\n      \"h\": 20,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h4\",\n      \"x\": 622,\n      \"y\": 635,\n      \"w\": 60,\n      \"h\": 20,\n      \"type\": \"lava\"\n    }\n  ],\n  \"coins\": [\n    {\n      \"id\": \"c1\",\n      \"x\": 305,\n      \"y\": 585\n    },\n    {\n      \"id\": \"c2\",\n      \"x\": 470,\n      \"y\": 595\n    },\n    {\n      \"id\": \"c3\",\n      \"x\": 596,\n      \"y\": 605\n    }\n  ],\n  \"enemies\": []\n}"
+}

@@ -1,0 +1,9 @@
+{
+  "kind": "level",
+  "label": "level",
+  "model": "gemini-3.8-flash",
+  "promptHash": "abcad129",
+  "inputHash": "f65962a7c054",
+  "recordedAt": "2026-09-19T19:02:47.173Z",
+  "text": "{\n  \"name\": \"Hot Floor Hopscotch\",\n  \"intro\": \"Watch your step over the lava strip and mind the peak's fiery spire!\",\n  \"quips\": [\n    \"The floor was literally lava. Did you forget?\",\n    \"That spike didn't even move and it still outsmarted you.\",\n    \"Jumping high is good, jumping onto spikes is less good.\",\n    \"Gravity remains undefeated.\",\n    \"Maybe take the lower ledges next time?\",\n    \"A crisp landing, unfortunately in the wrong way.\"\n  ],\n  \"start\": {\n    \"x\": 158,\n    \"y\": 700\n  },\n  \"goal\": {\n    \"id\": \"goal\",\n    \"x\": 875,\n    \"y\": 665,\n    \"w\": 36,\n    \"h\": 36\n  },\n  \"platforms\": [\n    {\n      \"id\": \"p1\",\n      \"x\": 110,\n      \"y\": 730,\n      \"w\": 820,\n      \"h\": 22\n    },\n    {\n      \"id\": \"p2\",\n      \"x\": 230,\n      \"y\": 648,\n      \"w\": 155,\n      \"h\": 15\n    },\n    {\n      \"id\": \"p3\",\n      \"x\": 428,\n      \"y\": 476,\n      \"w\": 158,\n      \"h\": 15\n    },\n    {\n      \"id\": \"p4\",\n      \"x\": 620,\n      \"y\": 622,\n      \"w\": 160,\n      \"h\": 15\n    }\n  ],\n  \"hazards\": [\n    {\n      \"id\": \"h1\",\n      \"x\": 240,\n      \"y\": 716,\n      \"w\": 550,\n      \"h\": 14,\n      \"type\": \"lava\"\n    },\n    {\n      \"id\": \"h2\",\n      \"x\": 488,\n      \"y\": 438,\n      \"w\": 30,\n      \"h\": 38,\n      \"type\": \"spike\"\n    }\n  ],\n  \"coins\": [\n    {\n      \"id\": \"c1\",\n      \"x\": 295,\n      \"y\": 612\n    },\n    {\n      \"id\": \"c2\",\n      \"x\": 507,\n      \"y\": 393\n    },\n    {\n      \"id\": \"c3\",\n      \"x\": 701,\n      \"y\": 589\n    }\n  ],\n  \"enemies\": []\n}"
+}
