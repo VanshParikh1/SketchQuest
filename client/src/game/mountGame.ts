@@ -4,6 +4,7 @@ import { GameScene, GAME_SCENE_KEY } from "./GameScene";
 import { prepareLevel } from "./prepareLevel";
 import { DEBUG } from "./debug";
 import { installAudioUnlock } from "./audio";
+import { lockTouchBehavior } from "./touchLock";
 
 export type GameHandle = {
   game: Phaser.Game;
@@ -31,6 +32,11 @@ export function mountGame(el: HTMLElement): GameHandle {
     physics: { default: "arcade", arcade: { gravity: { x: 0, y: GRAVITY }, debug: DEBUG } },
     scene: [GameScene],
   });
+
+  // The canvas exists once Phaser has booted (immediately, if the DOM was already ready).
+  const lockCanvas = () => lockTouchBehavior(game.canvas);
+  if (game.isBooted) lockCanvas();
+  else game.events.once(Phaser.Core.Events.BOOT, lockCanvas);
 
   const handle: GameHandle = {
     game,

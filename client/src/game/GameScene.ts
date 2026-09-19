@@ -10,7 +10,7 @@ import {
   type Level,
   type WinEvent,
 } from "@sketchquest/shared";
-import { Player, type PlayerKeys } from "./Player";
+import { Player, type MoveInput } from "./Player";
 import { Enemy } from "./Enemy";
 import { AttemptState } from "./AttemptState";
 import { playDeathEffect } from "./deathEffects";
@@ -18,6 +18,8 @@ import { burstParticles } from "./particles";
 import { Hud } from "./Hud";
 import { WinOverlay } from "./WinOverlay";
 import { LevelIntro } from "./LevelIntro";
+import { TouchControls, touchControlsEnabled } from "./TouchControls";
+import { RotateBanner } from "./RotateBanner";
 import { isMuted, playCoin, playDeath, playStomp, playWin, toggleMute } from "./audio";
 import { DebugOverlay } from "./DebugOverlay";
 import { DEBUG } from "./debug";
@@ -54,6 +56,8 @@ export class GameScene extends Phaser.Scene {
   private hud!: Hud;
   private winOverlay?: WinOverlay;
   private debugOverlay?: DebugOverlay;
+  private touchControls?: TouchControls;
+  private rotateBanner?: RotateBanner;
   private dead = false;
   private won = false;
   /** True while the level-start title card is up: input and physics are frozen. */
@@ -137,6 +141,10 @@ export class GameScene extends Phaser.Scene {
 
     this.hud = new Hud(this);
 
+    const touch = touchControlsEnabled(this);
+    this.touchControls = touch ? new TouchControls(this) : undefined;
+    this.rotateBanner = touch ? new RotateBanner(this) : undefined;
+
     const kb = this.input.keyboard!;
     this.cursors = kb.createCursorKeys();
     this.keys = kb.addKeys("W,A,D") as typeof this.keys;
@@ -162,8 +170,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const keys: PlayerKeys = { cursors: this.cursors, wasd: this.keys };
-    this.player.handleInput(keys, this.locked);
+    this.player.handleInput(this.readInput(), this.locked);
+    this.rotateBanner?.update();
 
     if (!this.locked && this.player.y > this.fallThreshold) {
       this.triggerDeath("fall", this.player.x, this.player.y);
@@ -179,6 +187,17 @@ export class GameScene extends Phaser.Scene {
       this.attemptState.lastDeathsAtSpot,
       this.attemptState.timeAlive(this)
     );
+  }
+
+  /** Keyboard and touch buttons feed the same held-state, so jump feel behaves identically. */
+  private readInput(): MoveInput {
+    const { cursors, keys } = this;
+    const touch = this.touchControls?.read();
+    return {
+      left: cursors.left.isDown || keys.A.isDown || !!touch?.left,
+      right: cursors.right.isDown || keys.D.isDown || !!touch?.right,
+      jump: cursors.up.isDown || cursors.space.isDown || keys.W.isDown || !!touch?.jump,
+    };
   }
 
   /** New level loaded: show the title card with physics and input frozen, then "GO!" and unlock. */

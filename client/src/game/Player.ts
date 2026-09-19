@@ -11,10 +11,8 @@ const JUMP_BUFFER_MS = 100;
 const JUMP_CUTOFF_FACTOR = 0.5;
 const SQUASH_STRETCH_MS = 120;
 
-export type PlayerKeys = {
-  cursors: Phaser.Types.Input.Keyboard.CursorKeys;
-  wasd: Record<"W" | "A" | "D", Phaser.Input.Keyboard.Key>;
-};
+/** Held-state of the three player controls, from keyboard and/or touch. */
+export type MoveInput = { left: boolean; right: boolean; jump: boolean };
 
 /** The player rectangle plus its arcade body, movement, and jump feel. */
 export class Player {
@@ -57,7 +55,7 @@ export class Player {
     return this.body.blocked.down || this.body.touching.down;
   }
 
-  handleInput(keys: PlayerKeys, locked: boolean) {
+  handleInput(input: MoveInput, locked: boolean) {
     const now = this.scene.time.now;
     const grounded = this.grounded;
     if (grounded) this.lastGroundedAt = now;
@@ -71,10 +69,7 @@ export class Player {
       return;
     }
 
-    const { cursors, wasd } = keys;
-    const left = cursors.left.isDown || wasd.A.isDown;
-    const right = cursors.right.isDown || wasd.D.isDown;
-    const jumpDown = cursors.up.isDown || cursors.space.isDown || wasd.W.isDown;
+    const { left, right, jump: jumpDown } = input;
     const jumpJustPressed = jumpDown && !this.wasJumpDown;
 
     this.body.setVelocityX((Number(right) - Number(left)) * RUN_SPEED);
