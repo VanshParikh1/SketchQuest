@@ -1,7 +1,6 @@
 import Phaser from "phaser";
 import {
   JUMP_VELOCITY,
-  LevelSchema,
   WORLD_H,
   WORLD_W,
   gameEvents,
@@ -21,7 +20,8 @@ import { WinOverlay } from "./WinOverlay";
 import { DebugOverlay } from "./DebugOverlay";
 import { DEBUG } from "./debug";
 import { debugTestLevels } from "./testLevels";
-import { sanitizeLevel } from "./sanitizeLevel";
+import { prepareLevel } from "./prepareLevel";
+import { COIN_SIZE, sx, sy } from "./units";
 
 export const GAME_SCENE_KEY = "GameScene";
 
@@ -33,15 +33,10 @@ const COLORS = {
   goal: 0x2fb457,
 };
 
-const COIN_SIZE = 20;
 const DEATH_EFFECT_MS = 600;
 const FALL_MARGIN = 100;
 /** Stomping an enemy bounces the player at a fraction of a full jump. */
 const STOMP_BOUNCE_VELOCITY = JUMP_VELOCITY * 0.8;
-
-/** Normalized 0-1000 level coords -> world pixels. */
-const sx = (v: number) => (v / 1000) * WORLD_W;
-const sy = (v: number) => (v / 1000) * WORLD_H;
 
 export class GameScene extends Phaser.Scene {
   level: Level = sampleLevel;
@@ -173,10 +168,9 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  /** Debug-only (?debug=1): keys 1/2/3 load a test level, clamped/filtered by sanitizeLevel. */
+  /** Debug-only (?debug=1): keys 1/2/3 load a test level through the same prepareLevel pipeline as loadLevel. */
   private loadDebugLevel(n: 1 | 2 | 3) {
-    const level = LevelSchema.parse(sanitizeLevel(debugTestLevels[n]));
-    this.scene.restart({ level });
+    this.scene.restart({ level: prepareLevel(debugTestLevels[n]) });
   }
 
   private handleEnemyOverlap(enemy: Enemy) {

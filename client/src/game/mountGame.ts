@@ -1,7 +1,7 @@
 import Phaser from "phaser";
-import { GRAVITY, LevelSchema, WORLD_H, WORLD_W } from "@sketchquest/shared";
+import { GRAVITY, WORLD_H, WORLD_W } from "@sketchquest/shared";
 import { GameScene, GAME_SCENE_KEY } from "./GameScene";
-import { sanitizeLevel } from "./sanitizeLevel";
+import { prepareLevel } from "./prepareLevel";
 import { DEBUG } from "./debug";
 
 export type GameHandle = {
@@ -9,7 +9,8 @@ export type GameHandle = {
   /**
    * Tear down and rebuild the scene from level JSON. No page refresh.
    * Accepts untrusted data (e.g. raw Gemini output): bad entities are
-   * clamped or dropped by sanitizeLevel() instead of throwing.
+   * clamped or dropped by sanitizeLevel() instead of throwing, and
+   * fixLevel() moves the spawn/goal/coins somewhere playable.
    */
   loadLevel(level: unknown): void;
   destroy(): void;
@@ -32,7 +33,7 @@ export function mountGame(el: HTMLElement): GameHandle {
   const handle: GameHandle = {
     game,
     loadLevel(level) {
-      const parsed = LevelSchema.parse(sanitizeLevel(level));
+      const parsed = prepareLevel(level);
       const start = () => game.scene.start(GAME_SCENE_KEY, { level: parsed });
       if (game.isBooted) start();
       else game.events.once(Phaser.Core.Events.READY, start);
