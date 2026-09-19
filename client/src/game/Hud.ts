@@ -16,6 +16,7 @@ const HUD_DEPTH = 1000;
 export class Hud {
   private readonly coinText: Phaser.GameObjects.Text;
   private readonly mutedText: Phaser.GameObjects.Text;
+  private readonly narratorText: Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene) {
     // Static doodles: drawn once, never redrawn.
@@ -26,12 +27,30 @@ export class Hud {
     sketchLine(doodle, { x: 20, y: 66 }, { x: 170, y: 65 }, { color: INK.blue, width: 3, alpha: 0.7, wobble: 1.6 }, rng);
 
     this.coinText = scene.add.text(62, 22, "Coins: 0", STYLE).setScrollFactor(0).setDepth(HUD_DEPTH).setRotation(-0.035);
+    this.narratorText = scene.add
+      .text(20, 78, "Narrator: ON", { ...STYLE, fontSize: "24px", color: INK_CSS.green })
+      .setScrollFactor(0)
+      .setDepth(HUD_DEPTH)
+      .setRotation(-0.02);
     this.mutedText = scene.add
-      .text(20, 78, "Muted (M)", { ...STYLE, fontSize: "24px", color: INK_CSS.red })
+      .text(0, 78, "Muted (M)", { ...STYLE, fontSize: "24px", color: INK_CSS.red })
       .setScrollFactor(0)
       .setDepth(HUD_DEPTH)
       .setRotation(0.03)
       .setVisible(false);
+    this.placeMuted();
+  }
+
+  /** ON = the narrator's voice is speaking; OFF = captions only (muted, or the browser has no speech). */
+  setNarrator(voiceOn: boolean) {
+    this.narratorText.setText(voiceOn ? "Narrator: ON" : "Narrator: OFF (captions)");
+    this.narratorText.setColor(voiceOn ? INK_CSS.green : INK_CSS.red);
+    this.placeMuted();
+  }
+
+  /** The muted label sits right after the narrator label. */
+  private placeMuted() {
+    this.mutedText.setX(this.narratorText.x + this.narratorText.width + 22);
   }
 
   setMuted(muted: boolean) {

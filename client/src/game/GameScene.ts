@@ -32,6 +32,7 @@ import { addPaper } from "./paper";
 import { renderStaticLevel } from "./staticArt";
 import { LevelDoodles, boilTick } from "./animatedArt";
 import { DEPTH } from "./palette";
+import { narrator } from "./narrator";
 
 export const GAME_SCENE_KEY = "GameScene";
 
@@ -179,6 +180,7 @@ export class GameScene extends Phaser.Scene {
     this.restartKey = kb.addKey("R");
     this.muteKey = kb.addKey("M");
     this.hud.setMuted(isMuted());
+    this.hud.setNarrator(narrator.voiceActive());
 
     if (DEBUG) {
       this.debugOverlay = new DebugOverlay(this);
@@ -187,11 +189,18 @@ export class GameScene extends Phaser.Scene {
       kb.on("keydown-THREE", () => this.loadDebugLevel(3));
     }
 
+    narrator.bind(this, level, () => ({ x: this.player.x, y: this.player.y }));
     this.startIntro();
   }
 
   update(_time: number, delta: number) {
-    if (Phaser.Input.Keyboard.JustDown(this.muteKey)) this.hud.setMuted(toggleMute());
+    if (Phaser.Input.Keyboard.JustDown(this.muteKey)) {
+      this.hud.setMuted(toggleMute());
+      // M silences the narrator's voice too; its captions stay.
+      narrator.onMuteChanged();
+      this.hud.setNarrator(narrator.voiceActive());
+    }
+    narrator.update();
 
     if (Phaser.Input.Keyboard.JustDown(this.restartKey) && !this.dead && !this.intro) {
       this.restartLevel();
@@ -246,6 +255,7 @@ export class GameScene extends Phaser.Scene {
   private startIntro() {
     this.intro = true;
     this.physics.world.pause();
+    narrator.onLevelIntro();
     new LevelIntro(this, this.level.name, () => {
       this.intro = false;
       this.physics.world.resume();
@@ -278,6 +288,7 @@ export class GameScene extends Phaser.Scene {
     coin.setVisible(false);
     (coin.body as Phaser.Physics.Arcade.Body).enable = false;
     this.attemptState.collectCoin();
+    narrator.onCoin(this.attemptState.coins, this.coins.length);
     this.recorder.addCoin(this.time.now, this.coins.indexOf(coin));
     playCoin();
     coinBurst(this, coin.x, coin.y);
