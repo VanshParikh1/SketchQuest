@@ -1,11 +1,17 @@
 import Phaser from "phaser";
-import { GRAVITY, LevelSchema, WORLD_H, WORLD_W, type Level } from "@sketchquest/shared";
+import { GRAVITY, LevelSchema, WORLD_H, WORLD_W } from "@sketchquest/shared";
 import { GameScene, GAME_SCENE_KEY } from "./GameScene";
+import { sanitizeLevel } from "./sanitizeLevel";
+import { DEBUG } from "./debug";
 
 export type GameHandle = {
   game: Phaser.Game;
-  /** Tear down and rebuild the scene from level JSON. No page refresh. */
-  loadLevel(level: Level): void;
+  /**
+   * Tear down and rebuild the scene from level JSON. No page refresh.
+   * Accepts untrusted data (e.g. raw Gemini output): bad entities are
+   * clamped or dropped by sanitizeLevel() instead of throwing.
+   */
+  loadLevel(level: unknown): void;
   destroy(): void;
 };
 
@@ -19,14 +25,14 @@ export function mountGame(el: HTMLElement): GameHandle {
     height: WORLD_H,
     backgroundColor: "#f4efe1",
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    physics: { default: "arcade", arcade: { gravity: { x: 0, y: GRAVITY }, debug: false } },
+    physics: { default: "arcade", arcade: { gravity: { x: 0, y: GRAVITY }, debug: DEBUG } },
     scene: [GameScene],
   });
 
   const handle: GameHandle = {
     game,
     loadLevel(level) {
-      const parsed = LevelSchema.parse(level);
+      const parsed = LevelSchema.parse(sanitizeLevel(level));
       const start = () => game.scene.start(GAME_SCENE_KEY, { level: parsed });
       if (game.isBooted) start();
       else game.events.once(Phaser.Core.Events.READY, start);
@@ -42,7 +48,7 @@ export function mountGame(el: HTMLElement): GameHandle {
 }
 
 /** Load a level into the currently mounted game. */
-export function loadLevel(level: Level): void {
+export function loadLevel(level: unknown): void {
   if (!current) throw new Error("loadLevel called before mountGame");
   current.loadLevel(level);
 }
