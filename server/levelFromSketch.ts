@@ -12,10 +12,23 @@ import { readDiskLevel, writeDiskLevel } from "./levelCache";
 import { generate, type GenerateOptions, liveAvailable, thinkingFromEnv } from "./gemini";
 import { buildRepairPrompt, LEVEL_SYSTEM_PROMPT, LEVEL_USER_PROMPT } from "./prompts";
 
-/** Soft end-to-end target: repairs are skipped once this is spent. */
-const TOTAL_BUDGET_MS = 8000;
-const FIRST_CALL_TIMEOUT_MS = 6000;
-const REPAIR_TIMEOUT_MS = 4000;
+/**
+ * Level-generation time limits, in ms. A vision call with structured JSON output
+ * routinely takes more than the original 6s target (the first real photo timed out
+ * and fell back), so the defaults are effectively "as long as it needs" (they only
+ * stop a truly hung request):
+ *   GEMINI_LEVEL_TIMEOUT_MS         first call (default 120000)
+ *   GEMINI_LEVEL_REPAIR_TIMEOUT_MS  each repair call (default 120000)
+ *   GEMINI_LEVEL_BUDGET_MS          whole scan; repairs are skipped once it is spent (default 300000)
+ * Every call's timeout is also capped by what is left of the budget.
+ */
+const envMs = (name: string, fallback: number): number => {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n >= 1000 ? n : fallback;
+};
+const totalBudgetMs = () => envMs("GEMINI_LEVEL_BUDGET_MS", 300000);
+const firstCallTimeoutMs = () => envMs("GEMINI_LEVEL_TIMEOUT_MS", 120000);
+const repairTimeoutMs = () => envMs("GEMINI_LEVEL_REPAIR_TIMEOUT_MS", 120000);
 const MAX_REPAIRS = 2;
 /** Not worth starting a repair call with less than this left. */
 const MIN_REPAIR_MS = 1500;
@@ -101,7 +114,7 @@ export async function levelFromSketch(
 async function buildLevel(image: SketchImage, hash: string, gen: Generate): Promise<LevelResponse> {
   const started = Date.now();
   const tag = `[level] ${hash.slice(0, 8)}`;
-  const remaining = () => TOTAL_BUDGET_MS - (Date.now() - started);
+  const remaining = () => totalBudgetMs() - (Date.now() - started);
   const fallback = (reason: string): LevelResponse => {
     console.warn(`${tag} fallback (${reason}) total=${Date.now() - started}ms`);
     return { level: pickFallback(hash), meta: { repairs: 0, fallback: true } };
@@ -118,7 +131,7 @@ async function buildLevel(image: SketchImage, hash: string, gen: Generate): Prom
       label: "level",
       system: LEVEL_SYSTEM_PROMPT,
       input: [{ type: "text", text: LEVEL_USER_PROMPT }, imagePart],
-      timeoutMs: Math.min(FIRST_CALL_TIMEOUT_MS, remaining()),
+      timeoutMs: Math.min(firstCallTimeoutMs(), remaining()),
     });
     console.log(`${tag} gemini call ${Date.now() - t}ms`);
   } catch (error) {
@@ -142,7 +155,7 @@ async function buildLevel(image: SketchImage, hash: string, gen: Generate): Prom
         label: `repair ${repairs}`,
         system: LEVEL_SYSTEM_PROMPT,
         input: [{ type: "text", text: buildRepairPrompt(level, verdict.report) }, imagePart],
-        timeoutMs: Math.min(REPAIR_TIMEOUT_MS, remaining()),
+        timeoutMs: Math.min(repairTimeoutMs(), remaining()),
       });
       console.log(`${tag} repair ${repairs} ${Date.now() - t}ms`);
     } catch (error) {
