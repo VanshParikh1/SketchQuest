@@ -7,7 +7,9 @@
     "dev": "tsx watch index.ts",
     "start": "NODE_ENV=production tsx index.ts",
     "typecheck": "tsc --noEmit",
-    "test:validate": "tsx scripts/test-validate.ts"
+    "test:validate": "tsx scripts/test-validate.ts",
+    "run-samples": "tsx scripts/run-samples.ts",
+    "test:pipeline": "tsx scripts/test-level-pipeline.ts"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",
