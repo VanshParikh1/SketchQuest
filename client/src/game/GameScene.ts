@@ -28,6 +28,7 @@ import { prepareLevel } from "./prepareLevel";
 import { COIN_SIZE, sx, sy } from "./units";
 import { addPaper } from "./paper";
 import { renderStaticLevel } from "./staticArt";
+import { LevelDoodles } from "./animatedArt";
 import { DEPTH } from "./palette";
 
 export const GAME_SCENE_KEY = "GameScene";
@@ -56,6 +57,7 @@ export class GameScene extends Phaser.Scene {
   goal!: Phaser.GameObjects.Rectangle;
 
   private attemptState = new AttemptState();
+  private doodles!: LevelDoodles;
   private hud!: Hud;
   private winOverlay?: WinOverlay;
   private debugOverlay?: DebugOverlay;
@@ -123,11 +125,13 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.existing(this.goal, true);
 
     for (const c of level.coins) {
-      const r = this.add.rectangle(sx(c.x), sy(c.y), COIN_SIZE, COIN_SIZE, COLORS.coin);
+      const r = this.add.rectangle(sx(c.x), sy(c.y), COIN_SIZE, COIN_SIZE, COLORS.coin).setAlpha(0);
       r.setData("id", c.id);
       this.physics.add.existing(r, true);
       this.coins.push(r);
     }
+
+    this.doodles = new LevelDoodles(this, level, this.coins);
 
     for (const e of level.enemies) {
       const enemy = new Enemy(this, e.id, sx(e.x), sy(e.y), e.patrol);
@@ -191,6 +195,7 @@ export class GameScene extends Phaser.Scene {
       enemy.update(this, this.platforms);
     }
 
+    this.doodles.update(this);
     this.hud.setCoins(this.attemptState.coins);
     this.debugOverlay?.update(
       this.attemptState.attempt,

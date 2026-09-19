@@ -62,6 +62,11 @@ function strokeChunks(g: Phaser.GameObjects.Graphics, pts: Pt[], ink: Ink, rng: 
   }
 }
 
+/** Public wrapper: an open polyline in uneven-pressure marker chunks (no overshoot, no extra wobble). */
+export function strokePolyline(g: Phaser.GameObjects.Graphics, pts: Pt[], ink: Ink, rng: Rng) {
+  if (pts.length >= 2 && pts.every((p) => ok(p.x, p.y))) strokeChunks(g, pts, ink, rng);
+}
+
 /** Points from a to b with a gentle bow and small random kinks. */
 function wobblePoints(a: Pt, b: Pt, rng: Rng, amp: number): Pt[] {
   const dx = b.x - a.x;
