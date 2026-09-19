@@ -14,7 +14,7 @@ import { Player, type MoveInput } from "./Player";
 import { Enemy } from "./Enemy";
 import { AttemptState } from "./AttemptState";
 import { playDeathEffect } from "./deathEffects";
-import { burstParticles } from "./particles";
+import { burstParticles, resetParticleBudget } from "./particles";
 import { Hud } from "./Hud";
 import { WinOverlay } from "./WinOverlay";
 import { LevelIntro } from "./LevelIntro";
@@ -100,6 +100,7 @@ export class GameScene extends Phaser.Scene {
     this.winOverlay = undefined;
     this.physics.world.resume();
     this.attemptState.reset(this);
+    resetParticleBudget(this);
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H + FALL_MARGIN + 50);
 
     // Visual layers: paper, then all static geometry baked once. The colored
