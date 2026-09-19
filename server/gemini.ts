@@ -44,6 +44,23 @@ export async function withTimeout<T>(
   }
 }
 
+/** gemini-3.8-flash accepts these; "minimal" is rejected with a 400. */
+export type ThinkingLevel = "low" | "medium" | "high";
+const THINKING_LEVELS: readonly string[] = ["low", "medium", "high"];
+
+/** Reads a thinking level from an env var, falling back to "low" (warns once per bad value). */
+export function thinkingFromEnv(name: string): ThinkingLevel {
+  const raw = process.env[name]?.trim().toLowerCase();
+  if (!raw) return "low";
+  if (THINKING_LEVELS.includes(raw)) return raw as ThinkingLevel;
+  if (!warnedThinking.has(raw)) {
+    warnedThinking.add(raw);
+    console.warn(`[gemini] ${name}="${raw}" is not one of ${THINKING_LEVELS.join("/")}; using "low"`);
+  }
+  return "low";
+}
+const warnedThinking = new Set<string>();
+
 export type InputPart = { type: "text"; text: string } | { type: "image"; data: string; mime_type: string };
 
 export type GenerateOptions = {
@@ -55,14 +72,16 @@ export type GenerateOptions = {
   /** JSON schema for structured output. Omit for plain text. */
   schema?: Record<string, unknown>;
   temperature?: number;
-  thinkingLevel?: "minimal" | "low" | "medium" | "high";
+  thinkingLevel?: ThinkingLevel;
   maxOutputTokens?: number;
 };
 
 /**
  * The Interactions generation_config type has no `temperature` field, so it
- * is sent through extra_body. If the API ever rejects it (HTTP 400), we retry
- * once without it and stop sending it, rather than failing every call.
+ * is sent through extra_body. gemini-3.8-flash accepts it. As a guard, if a
+ * call 400s with temperature set and the same call succeeds without it, we
+ * stop sending it for the life of the process (logged once). A 400 that also
+ * fails without temperature is not temperature's fault and changes nothing.
  */
 let temperatureSupported = true;
 
@@ -100,9 +119,12 @@ export async function generate(options: GenerateOptions): Promise<string> {
       return (await call(signal, temperature)).output_text;
     } catch (error) {
       if (temperature !== undefined && isBadRequest(error)) {
-        temperatureSupported = false;
-        console.warn(`[gemini] ${label}: 400 with temperature set; retrying without it`);
-        return (await call(signal, undefined)).output_text;
+        const retried = (await call(signal, undefined)).output_text;
+        if (temperatureSupported) {
+          temperatureSupported = false;
+          console.warn(`[gemini] ${label}: 400 only when temperature is set; no longer sending it`);
+        }
+        return retried;
       }
       throw error;
     }

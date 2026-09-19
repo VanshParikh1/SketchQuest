@@ -1,5 +1,5 @@
 import { type DeathCause, type RoastRequest } from "@sketchquest/shared";
-import { generate, hasGeminiKey, type GenerateOptions } from "./gemini";
+import { generate, hasGeminiKey, thinkingFromEnv, type GenerateOptions } from "./gemini";
 
 /** Model for roasts. Override with GEMINI_ROAST_MODEL; defaults to the level model. */
 const roastModel = () => process.env.GEMINI_ROAST_MODEL || undefined;
@@ -98,15 +98,24 @@ export function tidyRoast(text: string): string | null {
   return line || null;
 }
 
-export type Roast = { line: string; source: "model" | "fallback"; ms: number };
+export type Roast = {
+  line: string;
+  source: "model" | "fallback";
+  ms: number;
+  /** Raw model text before cleanup (when the model answered). */
+  raw?: string;
+  /** Why the fallback was used. */
+  reason?: string;
+};
 export type RoastGenerate = (options: GenerateOptions) => Promise<string>;
 
 /** Never throws and never takes much longer than ROAST_TIMEOUT_MS. */
 export async function roastLine(req: RoastRequest, gen: RoastGenerate = generate): Promise<Roast> {
   const started = Date.now();
+  let raw: string | undefined;
   const fallback = (reason: string): Roast => {
     console.warn(`[roast] fallback (${reason}) ${Date.now() - started}ms`);
-    return { line: fallbackRoast(req.cause, req.recentRoasts), source: "fallback", ms: Date.now() - started };
+    return { line: fallbackRoast(req.cause, req.recentRoasts), source: "fallback", ms: Date.now() - started, raw, reason };
   };
 
   if (gen === generate && !hasGeminiKey()) return fallback("GEMINI_API_KEY not set");
@@ -119,14 +128,16 @@ export async function roastLine(req: RoastRequest, gen: RoastGenerate = generate
       input: buildRoastPrompt(req),
       timeoutMs: ROAST_TIMEOUT_MS,
       temperature: 1,
-      thinkingLevel: "minimal",
-      maxOutputTokens: 80,
+      thinkingLevel: thinkingFromEnv("GEMINI_ROAST_THINKING"),
+      // Thinking tokens count against this cap; too small and the model returns no text at all.
+      maxOutputTokens: 512,
     });
+    raw = text;
     const line = tidyRoast(text);
     if (!line) return fallback("empty model output");
     const repeated = (req.recentRoasts ?? []).some((r) => r.trim().toLowerCase() === line.toLowerCase());
     if (repeated) return fallback("model repeated a recent roast");
-    return { line, source: "model", ms: Date.now() - started };
+    return { line, source: "model", ms: Date.now() - started, raw };
   } catch (error) {
     return fallback(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
   }

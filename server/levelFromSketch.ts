@@ -8,7 +8,7 @@ import {
   type LevelResponse,
 } from "@sketchquest/shared";
 import { pickFallback } from "./fallbackLevels";
-import { generate, type GenerateOptions, hasGeminiKey } from "./gemini";
+import { generate, type GenerateOptions, hasGeminiKey, thinkingFromEnv } from "./gemini";
 import { buildRepairPrompt, LEVEL_SYSTEM_PROMPT, LEVEL_USER_PROMPT } from "./prompts";
 
 /** Soft end-to-end target: repairs are skipped once this is spent. */
@@ -140,7 +140,7 @@ async function callForLevel(
     ...call,
     schema: LEVEL_JSON_SCHEMA,
     temperature: 0.2,
-    thinkingLevel: "low",
+    thinkingLevel: thinkingFromEnv("GEMINI_LEVEL_THINKING"),
   });
   const parsed: unknown = JSON.parse(stripFence(text));
   return LevelSchema.parse(sanitizeLevel(parsed));
