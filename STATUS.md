@@ -82,16 +82,22 @@ Level coordinate conventions (as the game currently interprets them):
 
 - **`mountGame(el)`** creates the Phaser game (1600x900, scale FIT, centered, arcade physics with shared `GRAVITY`, and Arcade's built-in hitbox debug renderer enabled iff `?debug=1`) and returns a `GameHandle { game, loadLevel, destroy }`.
 - **`loadLevel(level)`** (also `handle.loadLevel`) takes `unknown` (not `Level`) since it has to accept untrusted data (raw Gemini output). It runs the input through `sanitizeLevel()` before `LevelSchema.parse`, then restarts the scene with the result. No page refresh is needed. If called before Phaser has finished booting, it waits for boot. This is also what resets attempt/coin/death tracking, since it's a new level.
+- **`prepareLevel.ts`**: the one entry point for untrusted levels: `sanitizeLevel` -> `fixLevel` -> `LevelSchema.parse`. `loadLevel` and the debug hotkeys both go through it.
+- **`fixLevel.ts`**: spawn safety, runs after `sanitizeLevel`. Works in normalized coords using the shared `PLAYER_W`/`PLAYER_H` (converted via `units.ts`) and `COIN_SIZE` (the coin sprite edge, 20px). (1) If a level has no platforms, adds an `auto-ground` platform spanning the bottom. (2) If the player's box at `start` overlaps a platform or hazard, or no platform is beneath it, `start` snaps to the top-center of the nearest platform (`y = platform.y - half player height`), preferring a platform where the player wouldn't stand inside another platform/hazard. (3) A goal or coin fully inside a platform is nudged to just above that platform's top edge (repeated a few times for stacked platforms). Goals/coins only partly overlapping a platform are left alone.
+- **`units.ts`**: `sx`/`sy` (normalized -> world px), `nx`/`ny` (the inverse) and `COIN_SIZE`, shared by `GameScene` and `fixLevel`.
 - **`sanitizeLevel.ts`**: coerces arbitrary/malformed level data into something `LevelSchema` accepts instead of letting it throw — numeric fields are clamped into `[0, 1000]`, `w`/`h` fall back to `1` instead of `0`, invalid hazard `type`s fall back to `"spike"`, and any platform/hazard/coin/enemy missing a string `id` is dropped rather than crashing the whole level. Missing `start`/`goal` fall back to `sampleLevel`'s.
 - **`debug.ts`**: exports `DEBUG`, true iff the page URL has `?debug=1`.
 - **`testLevels.ts`**: three levels for the debug hotkeys — `easyLevel` (1), `spikeGauntletLevel` (2), and `messyLevel` (3, typed `unknown` on purpose: overlapping/duplicate platforms, out-of-range and negative coordinates, an invalid hazard type, entities missing `id`/`patrol`, and zero coins), exported together as `debugTestLevels`.
 - **`GameScene`** loads `sampleLevel` by default and orchestrates everything below; game logic itself lives in the smaller files it composes:
-  - **`Player.ts`**: the player rectangle + arcade body. `handleInput` reads arrow/WASD + jump using `RUN_SPEED`/`JUMP_VELOCITY` from `shared/constants.ts`, plus the game-feel layer: ~100ms coyote time (jump still works briefly after leaving a platform), ~100ms jump buffering (a jump pressed briefly before landing fires on landing), variable jump height (releasing jump early clamps the ascent to half a full jump), and squash-and-stretch tweens on jump and on landing. `bounce()` for the enemy-stomp pop, `teleport()` for respawn, `setActive()` to hide/disable during the death effect.
+  - **`Player.ts`**: the player rectangle + arcade body. `handleInput` takes a `MoveInput` (`{ left, right, jump }` held-state, built by `GameScene.readInput()` from arrow/WASD/space **or** the touch buttons) using `RUN_SPEED`/`JUMP_VELOCITY` from `shared/constants.ts`, plus the game-feel layer: ~100ms coyote time (jump still works briefly after leaving a platform), ~100ms jump buffering (a jump pressed briefly before landing fires on landing), variable jump height (releasing jump early clamps the ascent to half a full jump), and squash-and-stretch tweens on jump and on landing. `bounce()` for the enemy-stomp pop, `teleport()` for respawn, `setActive()` to hide/disable during the death effect.
   - **`Enemy.ts`**: a dynamic arcade body affected by gravity. Patrols `patrol` world px (scaled 0-1000 -> px like other level distances) centered on its spawn point, reversing at the range ends or when `overlapRect` finds no platform ahead of its leading edge (walking off an edge).
   - **`AttemptState.ts`**: tracks `attempt` (starts 1, `nextAttempt()` on a death), `coins` (this attempt), and death positions for `deathsAtSpot` (deaths within 100 world px of each other, including the current one, also kept as `lastDeathsAtSpot` for the debug overlay) and `timeAlive` (seconds since the attempt started, 1 decimal).
-  - **`deathEffects.ts`** / **`particles.ts`**: screen shake + red flash + a particle burst on death; `particles.ts`'s `burstParticles()` is reused for the (smaller, coin-colored) coin-collect burst.
+  - **`deathEffects.ts`** / **`particles.ts`** / **`floatingText.ts`**: `playDeathEffect(scene, x, y, cause)` does the screen shake + red flash + player-colored burst for every death, plus per cause: `spike` = red shards + "SPIKED"; `lava` = upward orange/yellow burst + "TOASTED"; `enemy` = "SQUISHED"; `fall` = three downward streaks + "GRAVITY WINS". Effects are pinned to the visible canvas (falls die below it). `floatText()` pops a word in, rises 100px and fades over 700ms in the `HAND_FONT` stack from `fonts.ts` (Comic Sans MS / Marker Felt / cursive). `burstParticles()` (now with an optional `arc`) is also used for the coin-collect burst.
+  - **`LevelIntro.ts`**: the level-start title card. On every new level load (`loadLevel`, the debug hotkeys, and the initial scene) it fades in the level name (~0.5s) with input and the physics world frozen for 1.5s, then unlocks and shows "GO!" for 0.4s. Not shown on `R` restarts or death respawns, and `R` is ignored while the card is up. The attempt timer restarts when input unlocks. No new shared event.
+  - **`audio.ts`**: Web Audio blips, no asset files: `playJump`/`playCoin`/`playDeath`/`playWin`/`playStomp`, master volume 0.12. The `AudioContext` is created lazily on the first keydown/pointer/touch (`installAudioUnlock()` in `mountGame`; the listeners stay until the context is actually running, which iOS needs). **M** toggles mute (state survives level loads; the HUD shows "Muted (M)").
+  - **`TouchControls.ts`** / **`RotateBanner.ts`** / **`touchLock.ts`**: see "Touch controls" below.
   - **`Hud.ts`**: the top-left "Coins: N" counter, fixed to the camera.
-  - **`WinOverlay.ts`**: the "LEVEL CLEAR" / time / coins / "press R to replay" overlay shown on reaching the goal.
+  - **`WinOverlay.ts`**: the "LEVEL CLEAR" / time / coins / "press R or tap to replay" overlay shown on reaching the goal. Tapping/clicking anywhere replays too (armed 500ms after the overlay appears so jump-mashing at the goal can't skip it).
   - **`DebugOverlay.ts`**: `?debug=1`-only text (top-right) showing `attempt`/`deathsAtSpot`/`timeAlive` each frame and a `[1/2/3] test levels` hint.
 - Gameplay loop implemented in `GameScene`:
   - **Death**: overlap with a spike/lava hazard, touching an enemy from the side/below, or falling past `WORLD_H + 100`px all fire exactly one `"death"` event via `gameEvents` (guarded by a `dead` flag), then play the death effect and respawn at the level start ~600ms later with coins reset. Landing on top of an enemy (falling, feet above its midpoint) kills the enemy and bounces the player instead of killing them.
@@ -99,6 +105,8 @@ Level coordinate conventions (as the game currently interprets them):
   - **Win**: overlap with the goal fires `"win"` with `{ coins, timeAlive }`, shows `WinOverlay`, and locks movement (via the same `locked` flag death uses).
   - **R** replays the level: resets to the start with coins/time cleared and the win overlay (if any) dismissed, without counting as a death or incrementing `attempt`.
   - **Debug only (`?debug=1`)**: hitboxes are drawn (Arcade's own debug renderer), the debug text overlay is shown, and pressing `1`/`2`/`3` loads `easyLevel`/`spikeGauntletLevel`/`messyLevel` via `this.scene.restart()` (through the same sanitize -> `LevelSchema.parse` pipeline as `loadLevel`).
+- **Touch controls** (`TouchControls.ts`): shown when Phaser detects a touch device (`sys.game.device.input.touch`) or the URL has `?touch=1`. Left/right buttons bottom-left and a jump button bottom-right, 120 world px each, semi-transparent rounded squares with arrow glyphs, pinned to the camera (`setScrollFactor(0)`). Every frame it polls all pointers against the button rects (so multi-touch works and a thumb can slide between buttons) and the result is OR'd with the keyboard into the same `MoveInput`, so coyote time, jump buffering and variable jump height (release jump = short hop) work identically. It tops up touch pointers to 3 (the same effect as `input.addPointer(2)`, but without stacking extra pointers on every scene restart). `touchLock.ts` sets `touch-action: none` and no-select/no-callout styles on the canvas and `preventDefault`s touch events and `contextmenu` on it (`mountGame` applies it once Phaser has booted).
+- **Phone scaling**: the scale mode is `FIT` (1600x900 letterboxed and centered, never cropped) in both orientations; Phaser re-measures the parent on `resize`/`orientationchange` and every 500ms. `RotateBanner.ts` draws a small "Rotate your phone" pill at the top of the scene while the window is portrait (`innerHeight > innerWidth`) and touch controls are on; it is not interactive so it never blocks play, and it scales itself up so it stays readable on the shrunken portrait canvas.
 - Fields on `GameScene`: `player` (`Player`), `platforms` (static group), `hazards`, `coins` (rectangle lists, each with its level `id` in `getData("id")`), `enemies` (`Enemy[]`), `goal`.
 
 ## UI (`client/src/ui`)
@@ -111,14 +119,15 @@ Level coordinate conventions (as the game currently interprets them):
 - Dev (prior scaffold pass): the game renders, the player runs and jumps and lands on platforms, and `loadLevel(customLevel)` rebuilds the scene with no refresh and a single canvas.
 - The `/api` proxy from Vite to Express works.
 - Production (`npm run build && npm start`): serves the client at `/`, falls back to `index.html` for unknown routes, and still returns JSON for `/api`.
-- The gameplay loop (death/respawn/coins/win/enemy patrol) and the game-feel/debug-tools pass on top of it have only been verified with `npm run typecheck` and `npm run build` so far, not by driving it in a browser yet — see "How to test" below for what to click through next.
+- The gameplay loop (death/respawn/coins/win/enemy patrol), the game-feel/debug-tools pass, and the later spawn-safety / level-intro / death-visuals / audio / touch-controls pass have only been verified with `npm run typecheck` and `npm run build` so far, not by driving them in a browser yet — see "How to test" below for what to click through next.
 
 ## Not done yet
 
 - Real `/api/level` (sketch to Gemini to `Level`, validated with `LevelSchema`) and `/api/roast`.
 - Sketch upload and other UI screens.
 - Sample sketches in `samples/`.
-- Tests.
+- Tests (`fixLevel` is a pure function and a good first unit-test target).
+- Touch mute button (mute is keyboard-only for now).
 - Manual/browser verification of this pass (see above).
 
 ## How to test
@@ -151,6 +160,24 @@ Then reload with `?debug=1` appended to the client URL (e.g. `http://localhost:5
 - **Debug text**: confirm the top-right overlay shows `attempt`, `deathsAtSpot`, and `timeAlive`, updating live.
 - **Test levels**: press `1` for `easyLevel`, `2` for `spikeGauntletLevel`, `3` for `messyLevel`, and confirm each loads (no page refresh) with attempt/coins/deaths reset.
 - **Messy level (`3`) doesn't crash**: confirm it loads without a thrown error or blank screen despite its duplicate/overlapping platforms, out-of-range and negative coordinates, invalid hazard type, entities missing `id`/`patrol`, and empty coins array — i.e. `sanitizeLevel` clamped/dropped the bad parts instead of `loadLevel` throwing.
+
+### Spawn safety, intro, death visuals, sound (added since)
+
+Try these with `?debug=1`, using `messyLevel` (`3`) and the levels' hotkeys:
+
+- **Spawn safety**: load a level whose `start` is inside a platform/hazard or floating over a gap (edit a test level, or hand one to `loadLevel`) and confirm the player appears standing on the nearest platform's top-center. A level with `platforms: []` should get a ground strip. A coin or the goal buried in a platform should sit just above it.
+- **Level intro**: on load the level name fades in, nothing moves (enemies included) for ~1.5s, then "GO!" for 0.4s and control returns. Pressing `R` (or dying) must **not** show it again, and `R` during the card does nothing. `1`/`2`/`3` show it again.
+- **Death visuals**: spike -> red shards + "SPIKED"; lava -> orange/yellow burst upward + "TOASTED"; enemy side hit -> "SQUISHED"; walk off the level -> streaks + "GRAVITY WINS" (text stays on screen). Words rise and fade in ~0.7s.
+- **Sound**: nothing plays before the first key press/tap; then jump, coin, death, win and stomp blips at low volume; `M` mutes/unmutes and the HUD shows "Muted (M)".
+
+## Testing on phone
+
+1. Vite only prints a **Network** URL when the dev server is exposed to the LAN, and `client/vite.config.ts` doesn't set `server.host` yet, so plain `npm run dev` prints just `Local`. Either add `host: true` under `server` in `client/vite.config.ts` (outside the game folder, so not done here), or run the two halves separately: `npm run dev -w server` in one terminal and `npm run dev -w client -- --host` in another. Then note the **Network** URL (e.g. `http://192.168.x.x:5173/`).
+2. Put the phone on the **same wifi** as the computer and open that Network URL. The API proxy still goes through Vite, so `/api` works from the phone.
+3. Touch controls appear automatically on touch devices. To see and try them on desktop, add `?touch=1` (e.g. `http://localhost:5173/?touch=1`) — the mouse can press one button at a time.
+4. Check: hold right and tap jump at the same time; tap-and-release jump for a short hop; slide a thumb from left to right; the page must not scroll, zoom or open a long-press menu over the canvas; rotate to portrait and confirm the level is fully visible (letterboxed) with the "Rotate your phone" pill; win and tap anywhere to replay.
+
+Touch-only caveats: audio unlocks on the first tap; there is no touch mute or restart button (`R`/`M` are keyboard-only; dying respawns and the win overlay is tap-to-replay). Page-level scroll/zoom outside the canvas is controlled by the UI's CSS/viewport meta, not the game.
 
 ## Known quirks
 
