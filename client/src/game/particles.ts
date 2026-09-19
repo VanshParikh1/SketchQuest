@@ -6,9 +6,11 @@ export type BurstOptions = {
   speed?: [number, number];
   size?: number;
   duration?: number;
+  /** Radians (0 = right, -PI/2 = up); when set, particles spread across this arc instead of a full circle. */
+  arc?: [number, number];
 };
 
-const DEFAULTS: Required<BurstOptions> = {
+const DEFAULTS: Required<Omit<BurstOptions, "arc">> = {
   color: 0xffffff,
   count: 12,
   speed: [60, 140],
@@ -19,8 +21,11 @@ const DEFAULTS: Required<BurstOptions> = {
 /** A quick burst of small colored squares flying out from (x, y) and fading. */
 export function burstParticles(scene: Phaser.Scene, x: number, y: number, opts: BurstOptions = {}) {
   const { color, count, speed, size, duration } = { ...DEFAULTS, ...opts };
+  const { arc } = opts;
   for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.3;
+    const angle = arc
+      ? arc[0] + Math.random() * (arc[1] - arc[0])
+      : (Math.PI * 2 * i) / count + Math.random() * 0.3;
     const s = speed[0] + Math.random() * (speed[1] - speed[0]);
     const particle = scene.add.rectangle(x, y, size, size, color);
     scene.tweens.add({

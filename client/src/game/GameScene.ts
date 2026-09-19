@@ -236,7 +236,7 @@ export class GameScene extends Phaser.Scene {
     gameEvents.emit("death", payload);
 
     this.player.setActive(false);
-    playDeathEffect(this, x, y);
+    playDeathEffect(this, x, y, cause);
 
     this.time.delayedCall(DEATH_EFFECT_MS, () => this.respawn());
   }
