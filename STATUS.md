@@ -69,13 +69,15 @@ Level coordinate conventions (as the game currently interprets them):
 
 | Route | Status |
 | --- | --- |
-| `GET /api/health` | Returns `{ ok: true }` |
+| `GET /api/health` | Returns `{ ok: true, mode: "mock" \| "live" }` (never the key) |
+| `GET /api/usage` | Non-production only: today's real-call count, cap, remaining, mode and flags |
 | `POST /api/level` | Real. Body `{ image }` -> `{ level, meta }`. 400 for a missing, oversized (> 12M base64 chars), non-base64 or non-JPEG/PNG/WebP image. Never 500s for Gemini failures: any error, timeout or unbeatable result returns a hand-made level with `meta.fallback: true` |
 | `POST /api/roast` | Real. Body `RoastRequest` -> `{ line }`. 400 only for a malformed body. Model timeout is `GEMINI_ROAST_TIMEOUT_MS` (default 2500ms) with SDK retries off; on timeout/429/error/junk output it returns a canned line for the cause, still with status 200 |
 
 Files in `server/`:
 
 - `env.ts`: loads the repo-root `.env` (side-effect import, first in `index.ts` and the scripts).
+- `config.ts` (env flags), `budget.ts` (persisted daily call cap), `fixtures.ts` (record/replay), `levelCache.ts` (disk cache), `mock.ts` (mock mode), `serve.ts` (what the endpoints serve given the flags; `index.ts` calls `serveLevel`/`serveRoast`).
 - `gemini.ts`: `@google/genai` Interactions API wrapper (`generate()`, `withTimeout()`, `GEMINI_MODEL` default `gemini-3.8-flash`). The SDK's `generation_config` type has no `temperature`, so it is sent via `extra_body`. Against gemini-3.8-flash it is accepted (no 400), but whether the value is honored is unverified. Guard: a 400 that succeeds when retried without temperature disables it for the process and logs once. Thinking level must be `low`/`medium`/`high` (`minimal` is rejected with a 400); it comes from `GEMINI_ROAST_THINKING` / `GEMINI_LEVEL_THINKING` (default `low`, invalid values fall back to `low` with a warning). `max_output_tokens` includes thinking tokens: 80 left the roast with no text (`status: incomplete`), so the roast uses 512.
 - `prompts.ts`, `levelFromSketch.ts`: one structured-output call (photo + system prompt, schema from `z.toJSONSchema(LevelSchema)`), then sanitize -> `validateLevel`. If unreachable it sends the photo, the level JSON and the validator report back for minimal edits (max 2 rounds). Per-call timeouts are ~6s first / ~4s repair and repairs are skipped once the ~8s budget is spent. Stage timings are logged.
 - `fallbackLevels.ts`: three hand-made levels (all checked by `test-validate.ts`), picked by image hash.
@@ -85,7 +87,7 @@ Files in `server/`:
 - `index.ts`: JSON body limit 20 MB, one-line request log for `/api`, JSON 404 for unknown `/api` routes, and a global JSON error handler.
 - `.env` is loaded from the repo root. In production the server runs through `tsx` (no compile step), because `shared` is TypeScript source.
 
-Scripts (from the repo root, `-w server`): `test:validate` (validator, sanitizer, fallback levels), `test:pipeline` (repair loop, fallback and cache with a scripted fake model, no network), `test:roast` (offline format checks, then 5 death contexts against the model when a key is set), `run-samples` (runs every image in `samples/` through the full pipeline and prints level name, entity counts, reachable, repairs, fallback, ms).
+Scripts (from the repo root, `-w server`): `test:validate` (validator, sanitizer, fallback levels), `test:pipeline` (repair loop, fallback, memory + disk cache, mock mode, daily cap, record/replay and the live-roast gate; fully offline, `scripts/offline-env.ts` swaps in a fake key and temp dirs first), `test:roast` (offline format checks, then 5 death contexts against the model when a key is set), `run-samples` (runs every image in `samples/` through the full pipeline and prints level name, entity counts, reachable, repairs, fallback, ms).
 
 ## Client game (`client/src/game`)
 
@@ -195,6 +197,7 @@ Touch-only caveats: audio unlocks on the first tap; there is no touch mute or re
 ## Latency and rate limits
 
 - **Paid tier required.** The free tier for gemini-3.8-flash allows 5 requests/minute and only 20 requests/day (the daily cap was hit during testing, after which every call returned 429). A level scan (1 call + up to 2 repairs) plus a roast per death exceeds that within seconds, and every 429 becomes a fallback level or canned roast.
+- **Spend controls (see README Deploy for the full table and recommended combos):** `GEMINI_MOCK=1` runs everything with zero Gemini calls; `GEMINI_LIVE_ROAST` (default 0) keeps roasts on the canned pool; `GEMINI_DAILY_CAP` (default 15, 0 = unlimited) counts real requests persisted in `server/.cache/usage.json`; `GEMINI_RECORD` / `GEMINI_REPLAY` save/serve `server/fixtures/`. Level results are also cached on disk by image hash.
 - **Timeouts and models (env):** `GEMINI_ROAST_TIMEOUT_MS` (default 2500; roast calls also run with SDK retries off so a 429 or slow call falls straight to the canned line), `GEMINI_MODEL`, `GEMINI_ROAST_MODEL`, `GEMINI_ROAST_THINKING`, `GEMINI_LEVEL_THINKING`. Level generation keeps the SDK's default retries, but each call's timeout is capped by what is left of the ~8s level budget, so retries cannot push a scan past it.
 - **Client cutoff (dev 3's roast fetch) should be `GEMINI_ROAST_TIMEOUT_MS` + ~500ms** (3000ms at the default) so the server's canned line still arrives instead of the client giving up first. It was 1500ms when the server timeout was 1200ms.
 - Last measurement (free tier, before the daily cap): roast calls at `low` thinking took ~1.6-3.4s typical with occasional 11-12s spikes, so expect some canned lines even at 2500ms. With retries off, a 429 falls back in ~150-500ms. Real numbers on the paid tier are still to be measured.
