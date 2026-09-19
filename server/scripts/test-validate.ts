@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { fallbackLevels } from "../fallbackLevels";
 import {
   MAX_FLAT_GAP,
   MAX_JUMP_HEIGHT,
+  LevelSchema,
   sampleLevel,
   sanitizeLevel,
   validateLevel,
@@ -166,5 +168,14 @@ test("sanitizeLevel renames duplicate ids instead of dropping entities", () => {
   });
   assert.deepEqual(fixed.platforms.map((p) => p.id), ["p", "p-2", "g-2"]);
 });
+
+for (const fallback of fallbackLevels) {
+  test(`fallback level "${fallback.name}" is reachable and schema-valid`, () => {
+    const result = validateLevel(fallback);
+    assert.equal(result.reachable, true, result.report.join("\n"));
+    assert.deepEqual(LevelSchema.parse(sanitizeLevel(fallback)), fallback);
+    assert.equal(fallback.quips.length, 6);
+  });
+}
 
 console.log(`\n${passed} tests passed`);
