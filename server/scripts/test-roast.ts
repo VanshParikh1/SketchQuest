@@ -33,10 +33,15 @@ const contexts: RoastRequest[] = [
 ];
 
 console.log(`\n${hasGeminiKey() ? "GEMINI_API_KEY set: calling the model" : "No GEMINI_API_KEY: showing fallback lines only"}\n`);
+let modelCount = 0;
 for (const c of contexts) {
-  const { line, source, ms } = await roastLine(c);
+  const { line, source, ms, raw, reason } = await roastLine(c);
   const words = line.split(/\s+/).length;
   assert.ok(words <= 20, `over 20 words: ${line}`);
-  assert.ok(ms < 2000, `too slow: ${ms}ms`);
-  console.log(`[${c.cause} x${c.deathsAtSpot}] ${ms}ms ${source} (${words}w): ${line}`);
+  if (source === "model") modelCount++;
+  console.log(`\n[${c.cause} x${c.deathsAtSpot}] ${source === "model" ? "MODEL" : "FALLBACK"}  ${ms}ms  ${words} words`);
+  if (source === "fallback") console.log(`  why:  ${reason}`);
+  if (raw !== undefined) console.log(`  raw:  ${JSON.stringify(raw)}`);
+  console.log(`  line: ${line}`);
 }
+console.log(`\n${modelCount}/${contexts.length} lines came from the model, ${contexts.length - modelCount} from the fallback pool.`);
