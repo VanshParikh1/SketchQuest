@@ -1,14 +1,22 @@
 import Phaser from "phaser";
 import {
   JUMP_VELOCITY,
-  PLAYER_H,
-  PLAYER_W,
-  RUN_SPEED,
   WORLD_H,
   WORLD_W,
+  gameEvents,
   sampleLevel,
+  type DeathCause,
+  type DeathEvent,
   type Level,
+  type WinEvent,
 } from "@sketchquest/shared";
+import { Player, type PlayerKeys } from "./Player";
+import { Enemy } from "./Enemy";
+import { AttemptState } from "./AttemptState";
+import { playDeathEffect } from "./deathEffects";
+import { burstParticles } from "./particles";
+import { Hud } from "./Hud";
+import { WinOverlay } from "./WinOverlay";
 
 export const GAME_SCENE_KEY = "GameScene";
 
@@ -18,12 +26,13 @@ const COLORS = {
   lava: 0xff8a1f,
   coin: 0xf2c200,
   goal: 0x2fb457,
-  enemy: 0x8a3ffc,
-  player: 0x2a6df4,
 };
 
 const COIN_SIZE = 20;
-const ENEMY_SIZE = 32;
+const DEATH_EFFECT_MS = 600;
+const FALL_MARGIN = 100;
+/** Stomping an enemy bounces the player at a fraction of a full jump. */
+const STOMP_BOUNCE_VELOCITY = JUMP_VELOCITY * 0.8;
 
 /** Normalized 0-1000 level coords -> world pixels. */
 const sx = (v: number) => (v / 1000) * WORLD_W;
@@ -32,15 +41,23 @@ const sy = (v: number) => (v / 1000) * WORLD_H;
 export class GameScene extends Phaser.Scene {
   level: Level = sampleLevel;
 
-  player!: Phaser.GameObjects.Rectangle;
+  player!: Player;
   platforms!: Phaser.Physics.Arcade.StaticGroup;
   hazards: Phaser.GameObjects.Rectangle[] = [];
   coins: Phaser.GameObjects.Rectangle[] = [];
-  enemies: Phaser.GameObjects.Rectangle[] = [];
+  enemies: Enemy[] = [];
   goal!: Phaser.GameObjects.Rectangle;
+
+  private attemptState = new AttemptState();
+  private hud!: Hud;
+  private winOverlay?: WinOverlay;
+  private dead = false;
+  private won = false;
+  private fallThreshold = WORLD_H + FALL_MARGIN;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: Record<"W" | "A" | "D", Phaser.Input.Keyboard.Key>;
+  private restartKey!: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super(GAME_SCENE_KEY);
@@ -50,59 +67,175 @@ export class GameScene extends Phaser.Scene {
     this.level = data.level ?? sampleLevel;
   }
 
+  /** True while death or the win overlay should block movement and hazards. */
+  private get locked() {
+    return this.dead || this.won;
+  }
+
   create() {
     const { level } = this;
 
-    // Scene fields survive restarts, so reset the per-level lists.
+    // Scene fields survive restarts, so reset all per-level state.
     this.hazards = [];
     this.coins = [];
     this.enemies = [];
+    this.dead = false;
+    this.won = false;
+    this.winOverlay = undefined;
+    this.attemptState.reset(this);
+    this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H + FALL_MARGIN + 50);
 
     this.platforms = this.physics.add.staticGroup();
     for (const p of level.platforms) {
-      const r = this.rectTopLeft(p, COLORS.platform);
-      this.platforms.add(r);
+      this.platforms.add(this.rectTopLeft(p, COLORS.platform));
     }
 
     for (const h of level.hazards) {
-      this.hazards.push(this.rectTopLeft(h, h.type === "lava" ? COLORS.lava : COLORS.spike));
+      const r = this.rectTopLeft(h, h.type === "lava" ? COLORS.lava : COLORS.spike);
+      r.setData("hazardType", h.type);
+      this.physics.add.existing(r, true);
+      this.hazards.push(r);
     }
 
     this.goal = this.rectTopLeft(level.goal, COLORS.goal);
+    this.physics.add.existing(this.goal, true);
 
     for (const c of level.coins) {
       const r = this.add.rectangle(sx(c.x), sy(c.y), COIN_SIZE, COIN_SIZE, COLORS.coin);
       r.setData("id", c.id);
+      this.physics.add.existing(r, true);
       this.coins.push(r);
     }
 
     for (const e of level.enemies) {
-      const r = this.add.rectangle(sx(e.x), sy(e.y), ENEMY_SIZE, ENEMY_SIZE, COLORS.enemy);
-      r.setData("id", e.id);
-      this.enemies.push(r);
+      const enemy = new Enemy(this, e.id, sx(e.x), sy(e.y), e.patrol);
+      this.physics.add.collider(enemy.rect, this.platforms);
+      this.enemies.push(enemy);
     }
 
-    this.player = this.add.rectangle(sx(level.start.x), sy(level.start.y), PLAYER_W, PLAYER_H, COLORS.player);
-    this.physics.add.existing(this.player);
-    (this.player.body as Phaser.Physics.Arcade.Body).setCollideWorldBounds(true);
-    this.physics.add.collider(this.player, this.platforms);
+    this.player = new Player(this, sx(level.start.x), sy(level.start.y));
+    this.physics.add.collider(this.player.rect, this.platforms);
+    this.physics.add.overlap(this.player.rect, this.hazards, (_p, hazard) => {
+      const type = (hazard as Phaser.GameObjects.Rectangle).getData("hazardType") as DeathCause;
+      this.triggerDeath(type, this.player.x, this.player.y);
+    });
+    this.physics.add.overlap(this.player.rect, this.coins, (_p, coin) => {
+      this.collectCoin(coin as Phaser.GameObjects.Rectangle);
+    });
+    this.physics.add.overlap(this.player.rect, this.goal, () => this.triggerWin());
+    for (const enemy of this.enemies) {
+      this.physics.add.overlap(this.player.rect, enemy.rect, () => this.handleEnemyOverlap(enemy));
+    }
+
+    this.hud = new Hud(this);
 
     const kb = this.input.keyboard!;
     this.cursors = kb.createCursorKeys();
     this.keys = kb.addKeys("W,A,D") as typeof this.keys;
+    this.restartKey = kb.addKey("R");
   }
 
   update() {
-    const body = this.player.body as Phaser.Physics.Arcade.Body;
-    const left = this.cursors.left.isDown || this.keys.A.isDown;
-    const right = this.cursors.right.isDown || this.keys.D.isDown;
-    const jump = this.cursors.up.isDown || this.cursors.space.isDown || this.keys.W.isDown;
-
-    body.setVelocityX((Number(right) - Number(left)) * RUN_SPEED);
-
-    if (jump && (body.blocked.down || body.touching.down)) {
-      body.setVelocityY(-JUMP_VELOCITY);
+    if (Phaser.Input.Keyboard.JustDown(this.restartKey) && !this.dead) {
+      this.replay();
+      return;
     }
+
+    const keys: PlayerKeys = { cursors: this.cursors, wasd: this.keys };
+    this.player.handleInput(keys, this.locked);
+
+    if (!this.locked && this.player.y > this.fallThreshold) {
+      this.triggerDeath("fall", this.player.x, this.player.y);
+    }
+
+    for (const enemy of this.enemies) {
+      enemy.update(this, this.platforms);
+    }
+
+    this.hud.setCoins(this.attemptState.coins);
+  }
+
+  private handleEnemyOverlap(enemy: Enemy) {
+    if (this.locked || !enemy.alive) return;
+
+    const isStomp = this.player.isFalling && this.player.bottom <= enemy.midY;
+    if (isStomp) {
+      enemy.kill();
+      this.player.bounce(STOMP_BOUNCE_VELOCITY);
+    } else {
+      this.triggerDeath("enemy", this.player.x, this.player.y);
+    }
+  }
+
+  private collectCoin(coin: Phaser.GameObjects.Rectangle) {
+    if (!coin.visible) return;
+    coin.setVisible(false);
+    (coin.body as Phaser.Physics.Arcade.Body).enable = false;
+    this.attemptState.collectCoin();
+    burstParticles(this, coin.x, coin.y, { color: COLORS.coin, count: 10, speed: [40, 100], size: 5, duration: 350 });
+  }
+
+  private resetCoinVisibility() {
+    for (const c of this.coins) {
+      c.setVisible(true);
+      (c.body as Phaser.Physics.Arcade.Body).enable = true;
+    }
+  }
+
+  /** Fires exactly one "death" event, plays the death effect, then respawns. */
+  private triggerDeath(cause: DeathCause, x: number, y: number) {
+    if (this.locked) return;
+    this.dead = true;
+
+    const deathsAtSpot = this.attemptState.recordDeath(x, y);
+    const payload: DeathEvent = {
+      cause,
+      x,
+      y,
+      attempt: this.attemptState.attempt,
+      deathsAtSpot,
+      coins: this.attemptState.coins,
+      timeAlive: this.attemptState.timeAlive(this),
+    };
+    gameEvents.emit("death", payload);
+
+    this.player.setActive(false);
+    playDeathEffect(this, x, y);
+
+    this.time.delayedCall(DEATH_EFFECT_MS, () => this.respawn());
+  }
+
+  private respawn() {
+    this.attemptState.nextAttempt(this);
+    this.resetCoinVisibility();
+    this.player.setActive(true);
+    this.player.teleport(sx(this.level.start.x), sy(this.level.start.y));
+    this.dead = false;
+  }
+
+  /** Reaching the goal: fires "win", shows the overlay, locks movement. */
+  private triggerWin() {
+    if (this.locked) return;
+    this.won = true;
+
+    const payload: WinEvent = {
+      coins: this.attemptState.coins,
+      timeAlive: this.attemptState.timeAlive(this),
+    };
+    gameEvents.emit("win", payload);
+    this.winOverlay = new WinOverlay(this, payload);
+  }
+
+  /** R key: replay the level (also used as a manual, non-death restart). */
+  private replay() {
+    if (this.winOverlay) {
+      this.winOverlay.destroy();
+      this.winOverlay = undefined;
+    }
+    this.won = false;
+    this.attemptState.restartAttempt(this);
+    this.resetCoinVisibility();
+    this.player.teleport(sx(this.level.start.x), sy(this.level.start.y));
   }
 
   private rectTopLeft(r: { id: string; x: number; y: number; w: number; h: number }, color: number) {
