@@ -28,7 +28,7 @@ import { prepareLevel } from "./prepareLevel";
 import { COIN_SIZE, sx, sy } from "./units";
 import { addPaper } from "./paper";
 import { renderStaticLevel } from "./staticArt";
-import { LevelDoodles } from "./animatedArt";
+import { LevelDoodles, boilTick } from "./animatedArt";
 import { DEPTH } from "./palette";
 
 export const GAME_SCENE_KEY = "GameScene";
@@ -191,8 +191,11 @@ export class GameScene extends Phaser.Scene {
       this.triggerDeath("fall", this.player.x, this.player.y);
     }
 
+    const tick = boilTick(this);
+    this.player.draw(tick);
     for (const enemy of this.enemies) {
       enemy.update(this, this.platforms);
+      enemy.draw(tick);
     }
 
     this.doodles.update(this);

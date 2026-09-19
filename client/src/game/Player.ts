@@ -1,7 +1,11 @@
 import Phaser from "phaser";
 import { JUMP_VELOCITY, PLAYER_H, PLAYER_W, RUN_SPEED } from "@sketchquest/shared";
 import { playJump } from "./audio";
+import { BOIL_VARIANTS, DEPTH } from "./palette";
+import { seededFor } from "./sketch";
+import { drawPlayer } from "./characterArt";
 
+/** Invisible physics carrier color; the visible doodle is the `art` Graphics. */
 const PLAYER_COLOR = 0x2a6df4;
 /** Grace window after leaving a platform where a jump still counts. */
 const COYOTE_MS = 100;
@@ -24,10 +28,14 @@ export class Player {
   private lastJumpPressedAt = -Infinity;
   private wasJumpDown = false;
   private wasGrounded = true;
+  private readonly art: Phaser.GameObjects.Graphics;
+  private facing: 1 | -1 = 1;
+  private artKey = "";
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     this.scene = scene;
-    this.rect = scene.add.rectangle(x, y, PLAYER_W, PLAYER_H, PLAYER_COLOR);
+    this.rect = scene.add.rectangle(x, y, PLAYER_W, PLAYER_H, PLAYER_COLOR).setAlpha(0);
+    this.art = scene.add.graphics().setDepth(DEPTH.player);
     scene.physics.add.existing(this.rect);
     this.body = this.rect.body as Phaser.Physics.Arcade.Body;
     this.body.setCollideWorldBounds(true);
@@ -108,6 +116,29 @@ export class Player {
   setActive(active: boolean) {
     this.body.enable = active;
     this.rect.setVisible(active);
+    this.art.setVisible(active);
+  }
+
+  /**
+   * Follows the physics body every frame (so squash/stretch and facing stay
+   * smooth) but only redraws the doodle when the boil tick or pose changes.
+   */
+  draw(tick: number) {
+    const { art, body, rect } = this;
+    const vx = body.velocity.x;
+    if (vx > 5) this.facing = 1;
+    else if (vx < -5) this.facing = -1;
+
+    art.setPosition(body.center.x, body.center.y);
+    art.setScale(rect.scaleX * this.facing, rect.scaleY);
+
+    const airborne = !this.grounded;
+    const running = !airborne && Math.abs(vx) > 10;
+    const rising = airborne && body.velocity.y < 0;
+    const key = `${tick}:${running}:${airborne}:${rising}`;
+    if (key === this.artKey) return;
+    this.artKey = key;
+    drawPlayer(art, { tick, running, airborne, rising }, seededFor("player", tick % BOIL_VARIANTS));
   }
 
   private playJumpSquash() {

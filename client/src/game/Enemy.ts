@@ -1,7 +1,12 @@
 import Phaser from "phaser";
 import { RUN_SPEED, WORLD_W } from "@sketchquest/shared";
+import { BOIL_VARIANTS, DEPTH } from "./palette";
+import { seededFor } from "./sketch";
+import { drawEnemy } from "./characterArt";
+import { burstParticles } from "./particles";
 
 const ENEMY_SIZE = 32;
+/** Invisible physics carrier color; the visible stick figure is the `art` Graphics. */
 const ENEMY_COLOR = 0x8a3ffc;
 const PATROL_SPEED = RUN_SPEED * 0.5;
 const EDGE_PROBE_SIZE = 4;
@@ -23,10 +28,15 @@ export class Enemy {
   private readonly minX: number;
   private readonly maxX: number;
   private direction: 1 | -1 = 1;
+  private readonly scene: Phaser.Scene;
+  private readonly art: Phaser.GameObjects.Graphics;
+  private lastTick = -1;
 
   constructor(scene: Phaser.Scene, id: string, x: number, y: number, patrol: number) {
     this.id = id;
-    this.rect = scene.add.rectangle(x, y, ENEMY_SIZE, ENEMY_SIZE, ENEMY_COLOR);
+    this.scene = scene;
+    this.rect = scene.add.rectangle(x, y, ENEMY_SIZE, ENEMY_SIZE, ENEMY_COLOR).setAlpha(0);
+    this.art = scene.add.graphics().setDepth(DEPTH.enemy);
     this.rect.setData("id", id);
 
     scene.physics.add.existing(this.rect);
@@ -57,6 +67,16 @@ export class Enemy {
     this.body.setVelocityX(PATROL_SPEED * this.direction);
   }
 
+  /** Follows the body each frame, faces the patrol direction, and redraws the leg swing on boil ticks. */
+  draw(tick: number) {
+    if (!this.alive) return;
+    const { art, body } = this;
+    art.setPosition(body.center.x, body.center.y).setScale(this.direction, 1);
+    if (tick === this.lastTick) return;
+    this.lastTick = tick;
+    drawEnemy(art, { tick }, seededFor(this.id, tick % BOIL_VARIANTS));
+  }
+
   private hasGroundAhead(scene: Phaser.Scene, platforms: Phaser.Physics.Arcade.StaticGroup): boolean {
     const half = ENEMY_SIZE / 2;
     const probeSize = EDGE_PROBE_SIZE;
@@ -70,6 +90,8 @@ export class Enemy {
   kill() {
     if (!this.alive) return;
     this.alive = false;
+    burstParticles(this.scene, this.rect.x, this.rect.y, { color: 0x1d1d24, count: 8, speed: [40, 110], size: 4, duration: 350 });
+    this.art.destroy();
     this.rect.destroy();
   }
 }
