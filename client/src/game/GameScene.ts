@@ -14,9 +14,11 @@ import { Player, type MoveInput } from "./Player";
 import { Enemy } from "./Enemy";
 import { AttemptState } from "./AttemptState";
 import { playDeathEffect } from "./deathEffects";
-import { burstParticles, resetParticleBudget } from "./particles";
+import { coinBurst, resetParticleBudget } from "./particles";
 import { Hud } from "./Hud";
 import { WinOverlay } from "./WinOverlay";
+import { RunRecorder } from "./RunRecorder";
+import { ReplayController } from "./Replay";
 import { LevelIntro } from "./LevelIntro";
 import { TouchControls, touchControlsEnabled } from "./TouchControls";
 import { RotateBanner } from "./RotateBanner";
@@ -60,6 +62,11 @@ export class GameScene extends Phaser.Scene {
   private doodles!: LevelDoodles;
   private hud!: Hud;
   private winOverlay?: WinOverlay;
+  private recorder = new RunRecorder(0);
+  /** Set while the winning run loops on screen; play is frozen and physics is not simulated. */
+  private replayCtl?: ReplayController;
+  /** A win that will enter replay mode at the start of the next update (not inside the physics callback). */
+  private pendingReplay?: WinEvent;
   private debugOverlay?: DebugOverlay;
   private touchControls?: TouchControls;
   private rotateBanner?: RotateBanner;
@@ -98,8 +105,13 @@ export class GameScene extends Phaser.Scene {
     this.won = false;
     this.intro = false;
     this.winOverlay = undefined;
+    // Its objects died with the previous scene run; a new level always starts out of replay mode.
+    this.replayCtl = undefined;
+    this.pendingReplay = undefined;
     this.physics.world.resume();
     this.attemptState.reset(this);
+    this.recorder = new RunRecorder(level.enemies.length);
+    this.recorder.clear(this.time.now);
     resetParticleBudget(this);
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H + FALL_MARGIN + 50);
 
@@ -141,6 +153,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.player = new Player(this, sx(level.start.x), sy(level.start.y));
+    this.player.onJump = () => this.recorder.addJump(this.time.now);
     this.physics.add.collider(this.player.rect, this.platforms);
     this.physics.add.overlap(this.player.rect, this.hazards, (_p, hazard) => {
       const type = (hazard as Phaser.GameObjects.Rectangle).getData("hazardType") as DeathCause;
@@ -177,16 +190,26 @@ export class GameScene extends Phaser.Scene {
     this.startIntro();
   }
 
-  update() {
+  update(_time: number, delta: number) {
     if (Phaser.Input.Keyboard.JustDown(this.muteKey)) this.hud.setMuted(toggleMute());
 
     if (Phaser.Input.Keyboard.JustDown(this.restartKey) && !this.dead && !this.intro) {
-      this.replay();
+      this.restartLevel();
+      return;
+    }
+
+    if (this.pendingReplay) this.beginReplay(this.pendingReplay);
+    if (this.replayCtl) {
+      this.replayCtl.update(delta);
+      this.rotateBanner?.update();
+      this.doodles.update(this);
+      this.hud.setCoins(this.replayCtl.coinsCollected);
       return;
     }
 
     this.player.handleInput(this.readInput(), this.locked);
     this.rotateBanner?.update();
+    if (!this.locked) this.recorder.update(this.time.now, this.player, this.enemies);
 
     if (!this.locked && this.player.y > this.fallThreshold) {
       this.triggerDeath("fall", this.player.x, this.player.y);
@@ -227,6 +250,7 @@ export class GameScene extends Phaser.Scene {
       this.intro = false;
       this.physics.world.resume();
       this.attemptState.restartAttempt(this);
+      this.recorder.clear(this.time.now);
     });
   }
 
@@ -241,6 +265,7 @@ export class GameScene extends Phaser.Scene {
     const isStomp = this.player.isFalling && this.player.bottom <= enemy.midY;
     if (isStomp) {
       enemy.kill();
+      this.recorder.addStomp(this.time.now, this.enemies.indexOf(enemy));
       this.player.bounce(STOMP_BOUNCE_VELOCITY);
       playStomp();
     } else {
@@ -253,8 +278,9 @@ export class GameScene extends Phaser.Scene {
     coin.setVisible(false);
     (coin.body as Phaser.Physics.Arcade.Body).enable = false;
     this.attemptState.collectCoin();
+    this.recorder.addCoin(this.time.now, this.coins.indexOf(coin));
     playCoin();
-    burstParticles(this, coin.x, coin.y, { color: COLORS.coin, count: 10, speed: [40, 100], size: 5, duration: 350 });
+    coinBurst(this, coin.x, coin.y);
   }
 
   private resetCoinVisibility() {
@@ -290,16 +316,18 @@ export class GameScene extends Phaser.Scene {
 
   private respawn() {
     this.attemptState.nextAttempt(this);
+    this.recorder.clear(this.time.now);
     this.resetCoinVisibility();
     this.player.setActive(true);
     this.player.teleport(sx(this.level.start.x), sy(this.level.start.y));
     this.dead = false;
   }
 
-  /** Reaching the goal: fires "win", shows the overlay, locks movement. */
+  /** Reaching the goal: fires "win", locks movement, then loops a replay of the run (or shows the full overlay if none was recorded). */
   private triggerWin() {
     if (this.locked) return;
     this.won = true;
+    this.recorder.finish(this.time.now, this.player, this.enemies);
 
     const payload: WinEvent = {
       coins: this.attemptState.coins,
@@ -307,17 +335,36 @@ export class GameScene extends Phaser.Scene {
     };
     gameEvents.emit("win", payload);
     playWin();
-    this.winOverlay = new WinOverlay(this, payload, () => this.replay());
+    if (this.recorder.usable) this.pendingReplay = payload;
+    else this.winOverlay = new WinOverlay(this, payload, () => this.restartLevel());
   }
 
-  /** R key: replay the level (also used as a manual, non-death restart). */
-  private replay() {
+  /** Enters REPLAY mode: physics frozen, the win overlay shrunk to a corner panel, the run looping. */
+  private beginReplay(payload: WinEvent) {
+    this.pendingReplay = undefined;
+    this.physics.world.pause();
+    this.winOverlay = new WinOverlay(this, payload, () => this.restartLevel(), {
+      deaths: this.attemptState.attempt - 1,
+      attempt: this.attemptState.attempt,
+    });
+    this.replayCtl = new ReplayController(this, this.recorder, this.player, this.enemies, this.coins);
+  }
+
+  /** R key or tap: restart the level (a manual, non-death restart; also leaves replay mode). */
+  private restartLevel() {
     if (this.winOverlay) {
       this.winOverlay.destroy();
       this.winOverlay = undefined;
     }
+    this.pendingReplay = undefined;
+    if (this.replayCtl) {
+      this.replayCtl.destroy();
+      this.replayCtl = undefined;
+      this.physics.world.resume();
+    }
     this.won = false;
     this.attemptState.restartAttempt(this);
+    this.recorder.clear(this.time.now);
     this.resetCoinVisibility();
     this.player.teleport(sx(this.level.start.x), sy(this.level.start.y));
   }
