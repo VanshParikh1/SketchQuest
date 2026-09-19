@@ -57,4 +57,9 @@ export class AttemptState {
     this.lastDeathsAtSpot = deathsAtSpot;
     return deathsAtSpot;
   }
+
+  /** Deaths recorded so far (including the latest) within `radius` world px of (x, y). */
+  deathsWithin(x: number, y: number, radius: number): number {
+    return this.deathPositions.filter((p) => Math.hypot(p.x - x, p.y - y) <= radius).length;
+  }
 }

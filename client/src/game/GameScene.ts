@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import {
   JUMP_VELOCITY,
+  PLAYER_H,
   WORLD_H,
   WORLD_W,
   gameEvents,
@@ -8,13 +9,14 @@ import {
   type DeathCause,
   type DeathEvent,
   type Level,
+  type Platform,
   type WinEvent,
 } from "@sketchquest/shared";
 import { Player, type MoveInput } from "./Player";
 import { Enemy } from "./Enemy";
 import { AttemptState } from "./AttemptState";
 import { playDeathEffect } from "./deathEffects";
-import { coinBurst, resetParticleBudget } from "./particles";
+import { burstParticles, coinBurst, resetParticleBudget } from "./particles";
 import { Hud } from "./Hud";
 import { WinOverlay } from "./WinOverlay";
 import { RunRecorder } from "./RunRecorder";
@@ -22,7 +24,7 @@ import { ReplayController } from "./Replay";
 import { LevelIntro } from "./LevelIntro";
 import { TouchControls, touchControlsEnabled } from "./TouchControls";
 import { RotateBanner } from "./RotateBanner";
-import { isMuted, playCoin, playDeath, playStomp, playWin, toggleMute } from "./audio";
+import { isMuted, playCoin, playDeath, playHelper, playStomp, playWin, toggleMute } from "./audio";
 import { DebugOverlay } from "./DebugOverlay";
 import { DEBUG } from "./debug";
 import { debugTestLevels } from "./testLevels";
@@ -31,8 +33,12 @@ import { COIN_SIZE, sx, sy } from "./units";
 import { addPaper } from "./paper";
 import { renderStaticLevel } from "./staticArt";
 import { LevelDoodles, boilTick } from "./animatedArt";
-import { DEPTH } from "./palette";
+import { DEPTH, INK, INK_CSS } from "./palette";
 import { narrator } from "./narrator";
+import { countAssists, drawAssistPlatform, isAssist, showAssistTag } from "./assistArt";
+import { findHelperRect } from "./helperPlatform";
+import { StuckHelper, STUCK_DEATHS, STUCK_RADIUS } from "./StuckHelper";
+import { floatText } from "./floatingText";
 
 export const GAME_SCENE_KEY = "GameScene";
 
@@ -69,6 +75,9 @@ export class GameScene extends Phaser.Scene {
   /** A win that will enter replay mode at the start of the next update (not inside the physics callback). */
   private pendingReplay?: WinEvent;
   private debugOverlay?: DebugOverlay;
+  private stuck!: StuckHelper;
+  /** Where the player last stood on something: a fall death has no useful death height. */
+  private lastGrounded = { x: 0, feetY: 0 };
   private touchControls?: TouchControls;
   private rotateBanner?: RotateBanner;
   private dead = false;
@@ -81,6 +90,7 @@ export class GameScene extends Phaser.Scene {
   private keys!: Record<"W" | "A" | "D", Phaser.Input.Keyboard.Key>;
   private restartKey!: Phaser.Input.Keyboard.Key;
   private muteKey!: Phaser.Input.Keyboard.Key;
+  private helperKey!: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super(GAME_SCENE_KEY);
@@ -173,12 +183,15 @@ export class GameScene extends Phaser.Scene {
     const touch = touchControlsEnabled(this);
     this.touchControls = touch ? new TouchControls(this) : undefined;
     this.rotateBanner = touch ? new RotateBanner(this) : undefined;
+    this.stuck = new StuckHelper(this, touch, () => this.useHelper());
+    this.lastGrounded = { x: sx(level.start.x), feetY: sy(level.start.y) + PLAYER_H / 2 };
 
     const kb = this.input.keyboard!;
     this.cursors = kb.createCursorKeys();
     this.keys = kb.addKeys("W,A,D") as typeof this.keys;
     this.restartKey = kb.addKey("R");
     this.muteKey = kb.addKey("M");
+    this.helperKey = kb.addKey("H");
     this.hud.setMuted(isMuted());
     this.hud.setNarrator(narrator.voiceActive());
 
@@ -187,6 +200,10 @@ export class GameScene extends Phaser.Scene {
       kb.on("keydown-ONE", () => this.loadDebugLevel(1));
       kb.on("keydown-TWO", () => this.loadDebugLevel(2));
       kb.on("keydown-THREE", () => this.loadDebugLevel(3));
+      // Plain D is "move right", so copying needs Shift.
+      kb.on("keydown-D", (e: KeyboardEvent) => {
+        if (e.shiftKey) this.copyLevelJson();
+      });
     }
 
     narrator.bind(this, level, () => ({ x: this.player.x, y: this.player.y }));
@@ -201,6 +218,7 @@ export class GameScene extends Phaser.Scene {
       this.hud.setNarrator(narrator.voiceActive());
     }
     narrator.update();
+    this.stuck.suppress(this.won || this.intro);
 
     if (Phaser.Input.Keyboard.JustDown(this.restartKey) && !this.dead && !this.intro) {
       this.restartLevel();
@@ -216,7 +234,11 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    if (Phaser.Input.Keyboard.JustDown(this.helperKey)) this.useHelper();
     this.player.handleInput(this.readInput(), this.locked);
+    if (!this.locked && this.player.body.blocked.down) {
+      this.lastGrounded = { x: this.player.x, feetY: this.player.bottom };
+    }
     this.rotateBanner?.update();
     if (!this.locked) this.recorder.update(this.time.now, this.player, this.enemies);
 
@@ -236,7 +258,8 @@ export class GameScene extends Phaser.Scene {
     this.debugOverlay?.update(
       this.attemptState.attempt,
       this.attemptState.lastDeathsAtSpot,
-      this.attemptState.timeAlive(this)
+      this.attemptState.timeAlive(this),
+      countAssists(this.level.platforms) + this.stuck.used
     );
   }
 
@@ -261,6 +284,7 @@ export class GameScene extends Phaser.Scene {
       this.physics.world.resume();
       this.attemptState.restartAttempt(this);
       this.recorder.clear(this.time.now);
+      for (const p of this.level.platforms) if (isAssist(p.id)) showAssistTag(this, p);
     });
   }
 
@@ -307,6 +331,9 @@ export class GameScene extends Phaser.Scene {
     this.dead = true;
 
     const deathsAtSpot = this.attemptState.recordDeath(x, y);
+    if (this.attemptState.deathsWithin(x, y, STUCK_RADIUS) >= STUCK_DEATHS) {
+      this.stuck.arm({ x, feetY: cause === "fall" ? this.lastGrounded.feetY : y + PLAYER_H / 2 });
+    }
     const payload: DeathEvent = {
       cause,
       x,
@@ -323,6 +350,54 @@ export class GameScene extends Phaser.Scene {
     playDeath();
 
     this.time.delayedCall(DEATH_EFFECT_MS, () => this.respawn());
+  }
+
+  /** H or the bulb: drop one helper platform near where the player keeps dying. */
+  private useHelper() {
+    const spot = this.stuck.currentSpot;
+    if (this.locked || !spot) return;
+
+    const { level, player } = this;
+    const goal = level.goal;
+    const box = { x: player.body.x, y: player.body.y, w: player.body.width, h: player.body.height };
+    const rect = findHelperRect({
+      platforms: [...level.platforms, ...this.stuck.live],
+      hazards: level.hazards,
+      goal,
+      deathX: spot.x,
+      feetY: spot.feetY,
+      player: box,
+    });
+    if (!rect) {
+      floatText(this, "NO ROOM", WORLD_W / 2, 400, INK_CSS.red);
+      return;
+    }
+
+    const platform: Platform = { id: `assist-live-${this.stuck.used + 1}`, ...rect };
+    this.platforms.add(this.rectTopLeft(platform, COLORS.platform));
+    const art = this.add.graphics().setDepth(DEPTH.staticLevel + 1).setAlpha(0);
+    drawAssistPlatform(art, platform);
+    this.tweens.add({ targets: art, alpha: 1, duration: 200 });
+    showAssistTag(this, platform);
+
+    const cx = sx(platform.x + platform.w / 2);
+    const cy = sy(platform.y + platform.h / 2);
+    burstParticles(this, cx, cy, { color: INK.grey, count: 10, speed: [40, 110], size: 7, duration: 450 });
+    burstParticles(this, cx, cy, { color: INK.paper, count: 8, speed: [30, 90], size: 6, duration: 400 });
+    playHelper();
+    this.stuck.commit(platform);
+  }
+
+  /** Debug-only (Shift+D): the level as loaded (after sanitize + fix) to the clipboard and the console. */
+  private copyLevelJson() {
+    const json = JSON.stringify(this.level, null, 2);
+    console.log(`[debug] level JSON (${this.level.name}):\n${json}`);
+    const done = (ok: boolean) => {
+      if (this.sys.isActive()) floatText(this, ok ? "COPIED" : "SEE CONSOLE", WORLD_W / 2, 320, ok ? INK_CSS.green : INK_CSS.red);
+    };
+    const copy = navigator.clipboard?.writeText(json);
+    if (copy) copy.then(() => done(true), () => done(false));
+    else done(false);
   }
 
   private respawn() {

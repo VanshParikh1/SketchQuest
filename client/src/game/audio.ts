@@ -116,3 +116,9 @@ export function playStomp() {
   tone({ freq: 240, endFreq: 90, type: "square", duration: 0.1, volume: 0.5 });
   tone({ freq: 520, endFreq: 760, type: "triangle", delay: 0.08, duration: 0.09, volume: 0.35 });
 }
+
+/** Soft two-note rise for a helper platform appearing. */
+export function playHelper() {
+  tone({ freq: 660, endFreq: 880, type: "triangle", duration: 0.09, volume: 0.22 });
+  tone({ freq: 990, type: "triangle", delay: 0.08, duration: 0.16, volume: 0.2 });
+}

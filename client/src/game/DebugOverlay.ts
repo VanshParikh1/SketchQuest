@@ -8,7 +8,7 @@ const STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
   padding: { x: 8, y: 4 },
 };
 
-/** Debug-only (?debug=1) text: attempt / deathsAtSpot / timeAlive, top-right. */
+/** Debug-only (?debug=1) text: attempt / deathsAtSpot / timeAlive / assists, top-right. */
 export class DebugOverlay {
   private readonly text: Phaser.GameObjects.Text;
 
@@ -20,9 +20,9 @@ export class DebugOverlay {
       .setDepth(1000);
   }
 
-  update(attempt: number, deathsAtSpot: number, timeAlive: number) {
+  update(attempt: number, deathsAtSpot: number, timeAlive: number, assists: number) {
     this.text.setText(
-      `attempt: ${attempt}\ndeathsAtSpot: ${deathsAtSpot}\ntimeAlive: ${timeAlive.toFixed(1)}s\n[1/2/3] test levels`
+      `attempt: ${attempt}\ndeathsAtSpot: ${deathsAtSpot}\ntimeAlive: ${timeAlive.toFixed(1)}s\nassists: ${assists}\n[1/2/3] test levels  [Shift+D] copy level`
     );
   }
 }
