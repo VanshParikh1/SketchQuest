@@ -10,6 +10,8 @@ const DEATH_SPOT_RADIUS = 100;
 export class AttemptState {
   attempt = 1;
   coins = 0;
+  /** deathsAtSpot from the most recent death, for the debug overlay. */
+  lastDeathsAtSpot = 0;
 
   private deathPositions: { x: number; y: number }[] = [];
   private attemptStartMs = 0;
@@ -18,6 +20,7 @@ export class AttemptState {
   reset(scene: Phaser.Scene) {
     this.attempt = 1;
     this.coins = 0;
+    this.lastDeathsAtSpot = 0;
     this.deathPositions = [];
     this.attemptStartMs = scene.time.now;
   }
@@ -51,6 +54,7 @@ export class AttemptState {
       this.deathPositions.filter((p) => Math.hypot(p.x - x, p.y - y) <= DEATH_SPOT_RADIUS).length +
       1;
     this.deathPositions.push({ x, y });
+    this.lastDeathsAtSpot = deathsAtSpot;
     return deathsAtSpot;
   }
 }
