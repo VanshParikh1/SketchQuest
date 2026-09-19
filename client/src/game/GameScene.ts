@@ -288,7 +288,7 @@ export class GameScene extends Phaser.Scene {
     };
     gameEvents.emit("win", payload);
     playWin();
-    this.winOverlay = new WinOverlay(this, payload);
+    this.winOverlay = new WinOverlay(this, payload, () => this.replay());
   }
 
   /** R key: replay the level (also used as a manual, non-death restart). */
