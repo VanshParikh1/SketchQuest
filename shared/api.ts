@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { DeathCauseSchema, type Level } from "./level";
 
-export type HealthResponse = { ok: true };
+/** `mode` is "mock" when the server is running with GEMINI_MOCK=1 (no Gemini calls), otherwise "live". */
+export type HealthResponse = { ok: true; mode: "mock" | "live" };
 
 /** POST /api/level request. `image` is a base64 JPEG (a `data:image/jpeg;base64,` prefix is tolerated). */
 export const LevelRequestSchema = z.object({ image: z.string().min(1) });
